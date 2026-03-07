@@ -1,0 +1,11 @@
+# Abaikan folder build yang berat
+**/Builds/Android/
+**/Builds/MacOSX/
+**/.cxx/
+**/build/
+**/intermediate/
+*.o
+*.obj
+
+# Jangan abaikan folder .github
+!.github/
