@@ -28,32 +28,44 @@ jobs:
           xcodebuild -configuration Release -quiet
           sudo cp build/Release/Projucer.app/Contents/MacOS/Projucer /usr/local/bin/
 
-      - name: Configure Jucer File
+      - name: Configure Jucer File (Python Script)
+        shell: python
         run: |
-          # 1. Pindahkan folder JUCE ke dalam NewProject agar path relatif bekerja
-          mv JUCE NewProject/
+          import xml.etree.ElementTree as ET
+          import os
+
+          jucer_path = 'NewProject/NewProject.jucer'
+          tree = ET.parse(jucer_path)
+          root = tree.getroot()
+
+          # 1. Perbaiki semua path modul agar mengarah ke folder JUCE yang baru didownload
+          for mp in root.findall(".//MODULEPATH"):
+              mp.set('path', '../JUCE/modules')
+
+          # 2. Tambahkan exporter XCODE_IPHONE jika belum ada
+          export_formats = root.find('EXPORTFORMATS')
+          if export_formats is not None and root.find(".//XCODE_IPHONE") is None:
+              xcode_iphone = ET.SubElement(export_formats, 'XCODE_IPHONE', {
+                  'targetFolder': 'Builds/iOS',
+                  'appleCombinedIPHONEOS_IPHONESIMULATOR': '1',
+                  'iosScreenOrientation': 'UIInterfaceOrientationPortrait'
+              })
+              configs = ET.SubElement(xcode_iphone, 'CONFIGURATIONS')
+              ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '1', 'name': 'Debug', 'targetName': 'SkyStreamRXV2'})
+              ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '0', 'name': 'Release', 'targetName': 'SkyStreamRXV2'})
+              
+              module_paths = ET.SubElement(xcode_iphone, 'MODULEPATHS')
+              # Ambil daftar modul dari ANDROIDSTUDIO
+              android_mps = root.find(".//ANDROIDSTUDIO/MODULEPATHS")
+              if android_mps is not None:
+                  for mp in android_mps:
+                      ET.SubElement(module_paths, 'MODULEPATH', {
+                          'id': mp.get('id'),
+                          'path': '../JUCE/modules'
+                      })
           
-          # 2. Tambahkan exporter XCODE_IPHONE ke file .jucer secara otomatis
-          sed -i '' '/<EXPORTFORMATS>/a \
-          <XCODE_IPHONE targetFolder="Builds/iOS" appleCombinedIPHONEOS_IPHONESIMULATOR="1" iosScreenOrientation="UIInterfaceOrientationPortrait" iosStatusBarStyle="Hidden"> \
-            <CONFIGURATIONS> \
-              <CONFIGURATION isDebug="1" name="Debug" targetName="SkyStreamRXV2"/> \
-              <CONFIGURATION isDebug="0" name="Release" targetName="SkyStreamRXV2"/> \
-            </CONFIGURATIONS> \
-            <MODULEPATHS> \
-              <MODULEPATH id="juce_audio_basics" path="../../JUCE/modules"/> \
-              <MODULEPATH id="juce_audio_devices" path="../../JUCE/modules"/> \
-              <MODULEPATH id="juce_audio_formats" path="../../JUCE/modules"/> \
-              <MODULEPATH id="juce_audio_processors" path="../../JUCE/modules"/> \
-              <MODULEPATH id="juce_audio_utils" path="../../JUCE/modules"/> \
-              <MODULEPATH id="juce_core" path="../../JUCE/modules"/> \
-              <MODULEPATH id="juce_data_structures" path="../../JUCE/modules"/> \
-              <MODULEPATH id="juce_events" path="../../JUCE/modules"/> \
-              <MODULEPATH id="juce_graphics" path="../../JUCE/modules"/> \
-              <MODULEPATH id="juce_gui_basics" path="../../JUCE/modules"/> \
-              <MODULEPATH id="juce_gui_extra" path="../../JUCE/modules"/> \
-            </MODULEPATHS> \
-          </XCODE_IPHONE>' NewProject/NewProject.jucer
+          # Simpan kembali file .jucer yang sudah dimodifikasi
+          tree.write(jucer_path, encoding='utf-8', xml_declaration=True)
 
       - name: Resave Jucer File
         run: |
