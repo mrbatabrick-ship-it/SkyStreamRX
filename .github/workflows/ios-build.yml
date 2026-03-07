@@ -1,6 +1,7 @@
 name: iOS Build
 
-on:  push:
+on:
+  push:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
@@ -10,86 +11,43 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
-      - name: Setup Xcode
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: latest-stable
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+
+      - name: Clone JUCE
+        run: |
+          git clone https://github.com/juce-framework/JUCE.git --depth 1
+
 
       - name: Build Projucer
         run: |
-          git clone https://github.com/juce-framework/JUCE.git --depth 1
           cd JUCE/extras/Projucer/Builds/MacOSX
           xcodebuild -configuration Release -quiet
           sudo cp build/Release/Projucer.app/Contents/MacOS/Projucer /usr/local/bin/
 
-      - name: Configure Jucer File (Python Script)
-        shell: python
-        run: |
-          import xml.etree.ElementTree as ET
-          import os
-
-          jucer_path = 'NewProject/NewProject.jucer'
-          # Ambil jalur absolut folder JUCE/modules di server GitHub
-          juce_modules_path = os.path.abspath('JUCE/modules')
-          
-          print(f"Mengarahkan semua modul ke: {juce_modules_path}")
-
-          tree = ET.parse(jucer_path)
-          root = tree.getroot()
-
-          # 1. PERBAIKAN: Ganti SEMUA <MODULEPATH> di seluruh exporter (Android, iOS, dll)
-          for mp in root.findall(".//MODULEPATH"):
-              mp.set('path', juce_modules_path)
-
-          # 2. Tambahkan exporter XCODE_IPHONE jika belum ada (karena file asli Anda hanya Android)
-          export_formats = root.find('EXPORTFORMATS')
-          if export_formats is not None and root.find(".//XCODE_IPHONE") is None:
-              print("Menambahkan exporter iOS ke file .jucer...")
-              xcode_iphone = ET.SubElement(export_formats, 'XCODE_IPHONE', {
-                  'targetFolder': 'Builds/iOS',
-                  'appleCombinedIPHONEOS_IPHONESIMULATOR': '1',
-                  'iosScreenOrientation': 'UIInterfaceOrientationPortrait'
-              })
-              configs = ET.SubElement(xcode_iphone, 'CONFIGURATIONS')
-              # Mengeset target name menjadi 'SkyStream' sesuai keinginan Anda
-              ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '1', 'name': 'Debug', 'targetName': 'SkyStream'})
-              ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '0', 'name': 'Release', 'targetName': 'SkyStream'})
-              
-              module_paths = ET.SubElement(xcode_iphone, 'MODULEPATHS')
-              for mod in root.findall(".//MODULES/MODULE"):
-                  mod_id = mod.get('id')
-                  ET.SubElement(module_paths, 'MODULEPATH', {'id': mod_id, 'path': juce_modules_path})
-          
-          # 3. Pastikan useLocalCopy="0" agar Projucer tidak mencari folder JuceLibraryCode lokal
-          for mod in root.findall(".//MODULE"):
-              mod.set('useLocalCopy', '0')
-              mod.set('useGlobalPath', '0')
-
-          tree.write(jucer_path, encoding='utf-8', xml_declaration=True)
-          print("Konfigurasi .jucer selesai dengan sukses.")
 
       - name: Resave Jucer File
         run: |
-          Projucer --resave NewProject/NewProject.jucer
+          Projucer --juce-modules="$PWD/JUCE/modules" --resave NewProject/NewProject.jucer
+
 
       - name: Build iOS App
         run: |
-          # Project name di .jucer adalah SkyStreamRXV2
-          xcodebuild -project NewProject/Builds/iOS/SkyStreamRXV2.xcodeproj \
-                     -scheme "SkyStreamRXV2 - App" \
-                     -configuration Release \
-                     -sdk iphoneos \
-                     CODE_SIGNING_ALLOWED=NO \
-                     CODE_SIGNING_REQUIRED=NO \
-                     clean build
+          xcodebuild \
+            -project NewProject/Builds/iOS/NewProject.xcodeproj \
+            -scheme "NewProject - App" \
+            -configuration Release \
+            -sdk iphoneos \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            clean build
 
-      - name: Upload Artifact
+
+      - name: Upload iOS Artifact
         uses: actions/upload-artifact@v4
         with:
           name: SkyStream-iOS
-          path: NewProject/Builds/iOS/build/Release-iphoneos/*.app
+          path: |
+            NewProject/Builds/iOS/build/Release-iphoneos/*.app
