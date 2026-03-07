@@ -11,61 +11,81 @@ jobs:
     runs-on: macos-latest
 
     steps:
-
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
-
-      - name: Clone JUCE
-        run: |
-          git clone https://github.com/juce-framework/JUCE.git --depth 1
-
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
 
       - name: Build Projucer
         run: |
+          git clone https://github.com/juce-framework/JUCE.git --depth 1
           cd JUCE/extras/Projucer/Builds/MacOSX
           xcodebuild -configuration Release -quiet
           sudo cp build/Release/Projucer.app/Contents/MacOS/Projucer /usr/local/bin/
 
-
-      - name: Fix JUCE Module Paths
+      - name: Clean and Configure Jucer (Python)
         shell: python
         run: |
           import xml.etree.ElementTree as ET
           import os
 
-          jucer_file = "NewProject/NewProject.jucer"
+          jucer_path = 'NewProject/NewProject.jucer'
           juce_modules = os.path.abspath("JUCE/modules")
-
-          tree = ET.parse(jucer_file)
+          
+          tree = ET.parse(jucer_path)
           root = tree.getroot()
 
-          for mp in root.findall(".//MODULEPATH"):
-              mp.set("path", juce_modules)
+          # 1. Hapus SEMUA exporter lama (Android, dll) agar tidak ada error validasi path
+          export_formats = root.find('EXPORTFORMATS')
+          if export_formats is not None:
+              for child in list(export_formats):
+                  export_formats.remove(child)
 
-          tree.write(jucer_file)
+          # 2. Tambahkan satu exporter iOS yang benar-benar bersih
+          xcode_iphone = ET.SubElement(export_formats, 'XCODE_IPHONE', {
+              'targetFolder': 'Builds/iOS',
+              'appleCombinedIPHONEOS_IPHONESIMULATOR': '1',
+              'iosScreenOrientation': 'UIInterfaceOrientationPortrait'
+          })
+          
+          configs = ET.SubElement(xcode_iphone, 'CONFIGURATIONS')
+          # Kita beri nama target 'SkyStream'
+          ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '1', 'name': 'Debug', 'targetName': 'SkyStream'})
+          ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '0', 'name': 'Release', 'targetName': 'SkyStream'})
+          
+          module_paths = ET.SubElement(xcode_iphone, 'MODULEPATHS')
+          for mod in root.findall(".//MODULES/MODULE"):
+              mod_id = mod.get('id')
+              ET.SubElement(module_paths, 'MODULEPATH', {'id': mod_id, 'path': juce_modules})
+              # Matikan Global Path agar wajib pakai folder JUCE yang kita download
+              mod.set('useLocalCopy', '0')
+              mod.set('useGlobalPath', '0')
 
+          tree.write(jucer_path, encoding='utf-8', xml_declaration=True)
+          print("File .jucer telah dibersihkan dan disiapkan khusus untuk iOS.")
 
       - name: Resave Jucer File
         run: |
           Projucer --resave NewProject/NewProject.jucer
 
-
       - name: Build iOS App
         run: |
-          xcodebuild \
-            -project NewProject/Builds/iOS/NewProject.xcodeproj \
-            -scheme "NewProject - App" \
-            -configuration Release \
-            -sdk iphoneos \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            clean build
-
+          # Project name di .jucer Anda adalah SkyStreamRXV2
+          xcodebuild -project NewProject/Builds/iOS/SkyStreamRXV2.xcodeproj \
+                     -scheme "SkyStream - App" \
+                     -configuration Release \
+                     -sdk iphoneos \
+                     CODE_SIGNING_ALLOWED=NO \
+                     CODE_SIGNING_REQUIRED=NO \
+                     clean build
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: SkyStream-iOS
-          path: |
-            NewProject/Builds/iOS/build/Release-iphoneos/*.app
+          path: NewProject/Builds/iOS/build/Release-iphoneos/*.app
