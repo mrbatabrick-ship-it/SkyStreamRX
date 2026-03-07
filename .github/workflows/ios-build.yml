@@ -12,7 +12,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4 # Update ke v4
         with:
           submodules: recursive
 
@@ -23,21 +23,17 @@ jobs:
 
       - name: Build Projucer
         run: |
-          # Mendownload JUCE untuk mendapatkan Projucer sebagai alat bantu build
           git clone https://github.com/juce-framework/JUCE.git --depth 1
           cd JUCE/extras/Projucer/Builds/MacOSX
           xcodebuild -configuration Release -quiet
-          # Copy hasil build Projucer agar bisa dipanggil sebagai perintah global
           sudo cp build/Release/Projucer.app/Contents/MacOS/Projucer /usr/local/bin/
 
       - name: Resave Jucer File
         run: |
-          # Arahkan ke folder NewProject karena file .jucer ada di sana
           Projucer --resave NewProject/NewProject.jucer
 
       - name: Build iOS App
         run: |
-          # Melakukan kompilasi menggunakan Xcode project yang baru saja dibuat oleh Projucer
           xcodebuild -project NewProject/Builds/iOS/NewProject.xcodeproj \
                      -scheme "NewProject - App" \
                      -configuration Release \
@@ -47,7 +43,7 @@ jobs:
                      clean build
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4 # Update ke v4 (Ini yang memperbaiki error tadi)
         with:
           name: SkyStream-iOS
           path: NewProject/Builds/iOS/build/Release-iphoneos/*.app
