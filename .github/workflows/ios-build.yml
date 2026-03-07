@@ -40,16 +40,13 @@ jobs:
           tree = ET.parse(jucer_path)
           root = tree.getroot()
 
-          # 1. Matikan pengaturan global
           for mod in root.findall(".//MODULE"):
               mod.set('useLocalCopy', '0')
               mod.set('useGlobalPath', '0')
 
-          # 2. Perbaiki SEMUA path modul secara global (Solusi cerdas Anda)
           for mp in root.findall(".//MODULEPATH"):
               mp.set("path", juce_modules)
 
-          # 3. Bersihkan exporter lama dan tambahkan exporter iOS yang bersih
           export_formats = root.find('EXPORTFORMATS')
           if export_formats is not None:
               for child in list(export_formats):
@@ -63,7 +60,6 @@ jobs:
           })
           
           configs = ET.SubElement(xcode_iphone, 'CONFIGURATIONS')
-          # Target Name diset ke SkyStream agar hasil filenya SkyStream.app
           ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '1', 'name': 'Debug', 'targetName': 'SkyStream'})
           ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '0', 'name': 'Release', 'targetName': 'SkyStream'})
           
@@ -79,7 +75,8 @@ jobs:
           Projucer --resave NewProject/NewProject.jucer --fix-missing-dependencies
 
       - name: Build iOS App
-        run: |# Kita paksa output ke folder 'build' agar mudah ditemukan
+        run: |
+          # Kita paksa output ke folder 'build' agar mudah ditemukan
           xcodebuild -project NewProject/Builds/iOS/SkyStreamRXV2.xcodeproj \
                      -scheme "SkyStreamRXV2 - App" \
                      -configuration Release \
@@ -95,6 +92,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: SkyStream-iOS
-          # Kita ambil semua file .app yang ada di folder build tadi
           path: NewProject/Builds/iOS/build/*.app
-          path: NewProject/Builds/iOS/build/Release-iphoneos/SkyStream.app
