@@ -10,7 +10,8 @@ jobs:
   build-ios:
     runs-on: macos-latest
 
-    steps:      - name: Checkout code
+    steps:
+      - name: Checkout code
         uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -39,12 +40,12 @@ jobs:
           tree = ET.parse(jucer_path)
           root = tree.getroot()
 
-          # 1. Matikan pengaturan global agar wajib pakai folder JUCE di server
+          # 1. Matikan pengaturan global
           for mod in root.findall(".//MODULE"):
               mod.set('useLocalCopy', '0')
               mod.set('useGlobalPath', '0')
 
-          # 2. Perbaiki SEMUA path modul secara global (Solusi Anda yang benar)
+          # 2. Perbaiki SEMUA path modul secara global (Solusi cerdas Anda)
           for mp in root.findall(".//MODULEPATH"):
               mp.set("path", juce_modules)
 
@@ -79,7 +80,7 @@ jobs:
 
       - name: Build iOS App
         run: |
-          # Perbaikan Exit Code 65: Mematikan signing secara paksa
+          # Mematikan code signing agar build berhasil tanpa sertifikat resmi
           xcodebuild -project NewProject/Builds/iOS/SkyStreamRXV2.xcodeproj \
                      -scheme "SkyStreamRXV2 - App" \
                      -configuration Release \
