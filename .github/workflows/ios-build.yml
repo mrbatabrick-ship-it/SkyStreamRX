@@ -28,28 +28,9 @@ jobs:
           sudo cp build/Release/Projucer.app/Contents/MacOS/Projucer /usr/local/bin/
 
 
-      - name: Fix JUCE Module Paths
-        shell: python
+      - name: Set JUCE Modules Path
         run: |
-          import xml.etree.ElementTree as ET
-          import os
-
-          jucer_file = "NewProject/NewProject.jucer"
-
-          juce_modules = os.path.abspath("JUCE/modules")
-
-          tree = ET.parse(jucer_file)
-          root = tree.getroot()
-
-          for mp in root.findall(".//MODULEPATH"):
-              mp.set("path", juce_modules)
-
-          tree.write(jucer_file)
-
-
-      - name: Verify Modules Folder
-        run: |
-          ls JUCE/modules
+          echo "JUCE_MODULES_PATH=$PWD/JUCE/modules" >> $GITHUB_ENV
 
 
       - name: Resave Jucer File
