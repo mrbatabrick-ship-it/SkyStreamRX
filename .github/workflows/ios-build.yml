@@ -3,14 +3,14 @@ name: iOS Build
 on:
   push:
     branches: [ main, master ]
-  pull_request:branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
 
 jobs:
   build-ios:
     runs-on: macos-latest
 
-    steps:
-      - name: Checkout code
+    steps:      - name: Checkout code
         uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -27,7 +27,7 @@ jobs:
           xcodebuild -configuration Release -quiet
           sudo cp build/Release/Projucer.app/Contents/MacOS/Projucer /usr/local/bin/
 
-      - name: Clean Slate Configuration (Python)
+      - name: Configure Jucer File (Python)
         shell: python
         run: |
           import xml.etree.ElementTree as ET
@@ -39,18 +39,21 @@ jobs:
           tree = ET.parse(jucer_path)
           root = tree.getroot()
 
-          # 1. Matikan pengaturan global
+          # 1. Matikan pengaturan global agar wajib pakai folder JUCE di server
           for mod in root.findall(".//MODULE"):
               mod.set('useLocalCopy', '0')
               mod.set('useGlobalPath', '0')
 
-          # 2. Hapus semua exporter lama (Android, dll)
+          # 2. Perbaiki SEMUA path modul secara global (Solusi Anda yang benar)
+          for mp in root.findall(".//MODULEPATH"):
+              mp.set("path", juce_modules)
+
+          # 3. Bersihkan exporter lama dan tambahkan exporter iOS yang bersih
           export_formats = root.find('EXPORTFORMATS')
           if export_formats is not None:
               for child in list(export_formats):
                   export_formats.remove(child)
 
-          # 3. Tambahkan satu exporter iOS yang bersih
           xcode_iphone = ET.SubElement(export_formats, 'XCODE_IPHONE', {
               'targetFolder': 'Builds/iOS',
               'appleCombinedIPHONEOS_IPHONESIMULATOR': '1',
@@ -59,6 +62,7 @@ jobs:
           })
           
           configs = ET.SubElement(xcode_iphone, 'CONFIGURATIONS')
+          # Target Name diset ke SkyStream agar hasil filenya SkyStream.app
           ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '1', 'name': 'Debug', 'targetName': 'SkyStream'})
           ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '0', 'name': 'Release', 'targetName': 'SkyStream'})
           
@@ -75,7 +79,7 @@ jobs:
 
       - name: Build iOS App
         run: |
-          # Perbaikan kunci: Menambahkan flag untuk mematikan signing secara total
+          # Perbaikan Exit Code 65: Mematikan signing secara paksa
           xcodebuild -project NewProject/Builds/iOS/SkyStreamRXV2.xcodeproj \
                      -scheme "SkyStreamRXV2 - App" \
                      -configuration Release \
@@ -84,8 +88,8 @@ jobs:
                      CODE_SIGNING_REQUIRED=NO \
                      CODE_SIGN_IDENTITY="" \
                      CODE_SIGN_ENTITLEMENTS="" \
-                     GCC_GENERATE_DEBUGGING_SYMBOLS=NO \
-                     build
+                     AD_HOC_CODE_SIGNING_ALLOWED=YES \
+                     clean build
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
