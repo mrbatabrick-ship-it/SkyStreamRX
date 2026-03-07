@@ -1,7 +1,6 @@
 name: iOS Build
 
-on:
-  push:
+on:  push:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
@@ -28,16 +27,38 @@ jobs:
           xcodebuild -configuration Release -quiet
           sudo cp build/Release/Projucer.app/Contents/MacOS/Projucer /usr/local/bin/
 
-      - name: Resave Jucer File
+      - name: Configure and Resave
         run: |
-          # Perbaikan: Menggunakan 'modulesPath' yang valid untuk macOS
-          Projucer --set-global-search-path macos modulesPath $GITHUB_WORKSPACE/JUCE/modules
+          # 1. Tambahkan exporter XCODE_IPHONE ke file .jucer jika belum ada
+          # Kita gunakan sed untuk menambahkan konfigurasi iOS dasar
+          sed -i '' '/<EXPORTFORMATS>/a \
+          <XCODE_IPHONE targetFolder="Builds/iOS" appleCombinedIPHONEOS_IPHONESIMULATOR="1" iosScreenOrientation="UIInterfaceOrientationPortrait" iosStatusBarStyle="Hidden" customPList="&lt;plist&gt;&lt;dict&gt;&lt;key&gt;UIStatusBarHidden&lt;/key&gt;&lt;true/&gt;&lt;key&gt;UIViewControllerBasedStatusBarAppearance&lt;/key&gt;&lt;false/&gt;&lt;/dict&gt;&lt;/plist&gt;"> \
+            <CONFIGURATIONS> \
+              <CONFIGURATION isDebug="1" name="Debug" targetName="SkyStream"/> \
+              <CONFIGURATION isDebug="0" name="Release" targetName="SkyStream"/> \
+            </CONFIGURATIONS> \
+            <MODULEPATHS> \
+              <MODULEPATH id="juce_audio_basics" path="'$GITHUB_WORKSPACE'/JUCE/modules"/> \
+              <MODULEPATH id="juce_audio_devices" path="'$GITHUB_WORKSPACE'/JUCE/modules"/> \
+              <MODULEPATH id="juce_audio_formats" path="'$GITHUB_WORKSPACE'/JUCE/modules"/> \
+              <MODULEPATH id="juce_audio_processors" path="'$GITHUB_WORKSPACE'/JUCE/modules"/> \
+              <MODULEPATH id="juce_audio_utils" path="'$GITHUB_WORKSPACE'/JUCE/modules"/> \
+              <MODULEPATH id="juce_core" path="'$GITHUB_WORKSPACE'/JUCE/modules"/> \
+              <MODULEPATH id="juce_data_structures" path="'$GITHUB_WORKSPACE'/JUCE/modules"/> \
+              <MODULEPATH id="juce_events" path="'$GITHUB_WORKSPACE'/JUCE/modules"/> \
+              <MODULEPATH id="juce_graphics" path="'$GITHUB_WORKSPACE'/JUCE/modules"/> \
+              <MODULEPATH id="juce_gui_basics" path="'$GITHUB_WORKSPACE'/JUCE/modules"/> \
+              <MODULEPATH id="juce_gui_extra" path="'$GITHUB_WORKSPACE'/JUCE/modules"/> \
+            </MODULEPATHS> \
+          </XCODE_IPHONE>' NewProject/NewProject.jucer
+          
+          # 2. Resave file jucer (ini akan membuat folder Builds/iOS)
           Projucer --resave NewProject/NewProject.jucer
 
       - name: Build iOS App
         run: |
-          xcodebuild -project NewProject/Builds/iOS/NewProject.xcodeproj \
-                     -scheme "NewProject - App" \
+          xcodebuild -project NewProject/Builds/iOS/SkyStreamRXV2.xcodeproj \
+                     -scheme "SkyStreamRXV2 - App" \
                      -configuration Release \
                      -sdk iphoneos \
                      CODE_SIGNING_ALLOWED=NO \
