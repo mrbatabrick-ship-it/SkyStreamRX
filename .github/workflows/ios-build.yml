@@ -2,7 +2,8 @@ name: iOS Build
 
 on:
   push:
-    branches: [ main, master ]pull_request:
+    branches: [ main, master ]
+  pull_request:
     branches: [ main, master ]
 
 jobs:
@@ -34,36 +35,40 @@ jobs:
           import os
 
           jucer_path = 'NewProject/NewProject.jucer'
-          # Gunakan path relatif yang benar di server
-          juce_modules = '../JUCE/modules'
+          juce_modules = os.path.abspath("JUCE/modules")
           
           tree = ET.parse(jucer_path)
           root = tree.getroot()
 
-          # 1. Perbaiki SEMUA path modul secara global (Solusi Anda yang cerdas)
+          # 1. Perbaiki semua path modul secara global
           for mp in root.findall(".//MODULEPATH"):
               mp.set("path", juce_modules)
 
-          # 2. Tambahkan exporter iOS jika belum ada
+          # 2. Hapus exporter lama dan tambahkan exporter iOS yang bersih
           export_formats = root.find('EXPORTFORMATS')
-          if export_formats is not None and root.find(".//XCODE_IPHONE") is None:
-              xcode_iphone = ET.SubElement(export_formats, 'XCODE_IPHONE', {
-                  'targetFolder': 'Builds/iOS',
-                  'appleCombinedIPHONEOS_IPHONESIMULATOR': '1',
-                  'iosScreenOrientation': 'UIInterfaceOrientationPortrait'
-              })
-              configs = ET.SubElement(xcode_iphone, 'CONFIGURATIONS')
-              # Kita set nama output file menjadi SkyStream
-              ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '1', 'name': 'Debug', 'targetName': 'SkyStream'})
-              ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '0', 'name': 'Release', 'targetName': 'SkyStream'})
-              
-              module_paths = ET.SubElement(xcode_iphone, 'MODULEPATHS')
-              for mod in root.findall(".//MODULES/MODULE"):
-                  mod_id = mod.get('id')
-                  ET.SubElement(module_paths, 'MODULEPATH', {'id': mod_id, 'path': juce_modules})
+          if export_formats is not None:
+              for child in list(export_formats):
+                  export_formats.remove(child)
+
+          xcode_iphone = ET.SubElement(export_formats, 'XCODE_IPHONE', {
+              'targetFolder': 'Builds/iOS',
+              'appleCombinedIPHONEOS_IPHONESIMULATOR': '1',
+              'iosScreenOrientation': 'UIInterfaceOrientationPortrait'
+          })
+          
+          configs = ET.SubElement(xcode_iphone, 'CONFIGURATIONS')
+          # Kita beri nama target 'SkyStream'
+          ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '1', 'name': 'Debug', 'targetName': 'SkyStream'})
+          ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '0', 'name': 'Release', 'targetName': 'SkyStream'})
+          
+          module_paths = ET.SubElement(xcode_iphone, 'MODULEPATHS')
+          for mod in root.findall(".//MODULES/MODULE"):
+              mod_id = mod.get('id')
+              ET.SubElement(module_paths, 'MODULEPATH', {'id': mod_id, 'path': juce_modules})
+              mod.set('useLocalCopy', '0')
+              mod.set('useGlobalPath', '0')
 
           tree.write(jucer_path, encoding='utf-8', xml_declaration=True)
-          print("File .jucer telah berhasil dikonfigurasi.")
 
       - name: Resave Jucer File
         run: |
@@ -71,8 +76,8 @@ jobs:
 
       - name: Build iOS App
         run: |
-          # Nama project Xcode mengikuti nama project di .jucer (SkyStreamRXV2)
-          # Nama Scheme mengikuti pola: "NamaProject - App"
+          # Projucer menamai xcodeproj sesuai nama project di .jucer (SkyStreamRXV2)
+          # Tapi nama skema biasanya tetap menggunakan nama project lama: "SkyStreamRXV2 - App"
           xcodebuild -project NewProject/Builds/iOS/SkyStreamRXV2.xcodeproj \
                      -scheme "SkyStreamRXV2 - App" \
                      -configuration Release \
@@ -86,5 +91,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: SkyStream-iOS
-          # File yang dicari adalah SkyStream.app karena kita ubah targetName di atas
           path: NewProject/Builds/iOS/build/Release-iphoneos/SkyStream.app
