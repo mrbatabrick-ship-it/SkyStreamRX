@@ -12,7 +12,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4 # Update ke v4
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 
@@ -30,6 +30,8 @@ jobs:
 
       - name: Resave Jucer File
         run: |
+          # Perbaikan Path Modul di Server
+          Projucer --set-global-search-path macos defaultModulesPath $GITHUB_WORKSPACE/JUCE/modules
           Projucer --resave NewProject/NewProject.jucer
 
       - name: Build iOS App
@@ -43,7 +45,7 @@ jobs:
                      clean build
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v4 # Update ke v4 (Ini yang memperbaiki error tadi)
+        uses: actions/upload-artifact@v4
         with:
           name: SkyStream-iOS
           path: NewProject/Builds/iOS/build/Release-iphoneos/*.app
