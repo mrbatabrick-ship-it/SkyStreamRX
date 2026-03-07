@@ -30,8 +30,8 @@ jobs:
 
       - name: Resave Jucer File
         run: |
-          # Perbaikan Path Modul di Server
-          Projucer --set-global-search-path macos defaultModulesPath $GITHUB_WORKSPACE/JUCE/modules
+          # Perbaikan: Menggunakan 'modulesPath' yang valid untuk macOS
+          Projucer --set-global-search-path macos modulesPath $GITHUB_WORKSPACE/JUCE/modules
           Projucer --resave NewProject/NewProject.jucer
 
       - name: Build iOS App
