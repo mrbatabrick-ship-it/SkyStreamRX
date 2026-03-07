@@ -14,12 +14,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-
-      # Download JUCE
+      # Clone JUCE
       - name: Clone JUCE
         run: |
           git clone https://github.com/juce-framework/JUCE.git --depth 1
-
 
       # Build Projucer
       - name: Build Projucer
@@ -28,14 +26,17 @@ jobs:
           xcodebuild -configuration Release -quiet
           sudo cp build/Release/Projucer.app/Contents/MacOS/Projucer /usr/local/bin/
 
-
-      # Perbaiki module path di .jucer
+      # Fix module paths dengan absolute path
       - name: Fix JUCE module paths
         shell: python
         run: |
           import xml.etree.ElementTree as ET
+          import os
 
           jucer_file = "NewProject/NewProject.jucer"
+
+          # absolute path ke JUCE modules
+          juce_modules = os.path.abspath("JUCE/modules")
 
           tree = ET.parse(jucer_file)
           root = tree.getroot()
@@ -44,16 +45,14 @@ jobs:
 
           if modules is not None:
               for module in modules:
-                  module.set("path", "../JUCE/modules")
+                  module.set("path", juce_modules)
 
           tree.write(jucer_file)
 
-
-      # Generate project
+      # Resave project
       - name: Resave Jucer File
         run: |
           Projucer --resave NewProject/NewProject.jucer
-
 
       # Build iOS
       - name: Build iOS App
@@ -67,8 +66,7 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             clean build
 
-
-      # Upload build
+      # Upload artefact
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
