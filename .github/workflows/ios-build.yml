@@ -28,31 +28,28 @@ jobs:
           xcodebuild -configuration Release -quiet
           sudo cp build/Release/Projucer.app/Contents/MacOS/Projucer /usr/local/bin/
 
-      - name: Configure Jucer File (Python)
+      - name: Fix Jucer Paths and Add iOS Exporter (Python)
         shell: python
         run: |
           import xml.etree.ElementTree as ET
           import os
 
           jucer_path = 'NewProject/NewProject.jucer'
-          # Ambil jalur absolut folder JUCE di server
-          workspace = os.environ['GITHUB_WORKSPACE']
-          juce_modules_path = os.path.join(workspace, 'JUCE', 'modules')
-
+          # Ambil jalur absolut modul JUCE di server GitHub
+          juce_modules_path = os.path.abspath('JUCE/modules')
+          
           tree = ET.parse(jucer_path)
           root = tree.getroot()
 
-          # 1. Paksa semua modul menggunakan jalur absolut yang benar di server
+          # 1. PERBAIKAN TOTAL: Ganti SEMUA path modul di semua exporter yang ada
           for mp in root.findall(".//MODULEPATH"):
               mp.set('path', juce_modules_path)
-          
-          # 2. Matikan 'Global Path' agar Projucer wajib menggunakan jalur di atas
-          for m in root.findall(".//MODULE"):
-              m.set('useGlobalPath', '0')
+              print(f"Updated module {mp.get('id')} to {juce_modules_path}")
 
-          # 3. Tambahkan exporter iOS jika belum ada
+          # 2. TAMBAH EXPORTER iOS: Jika belum ada di file .jucer
           export_formats = root.find('EXPORTFORMATS')
           if export_formats is not None and root.find(".//XCODE_IPHONE") is None:
+              print("Adding XCODE_IPHONE exporter...")
               xcode_iphone = ET.SubElement(export_formats, 'XCODE_IPHONE', {
                   'targetFolder': 'Builds/iOS',
                   'appleCombinedIPHONEOS_IPHONESIMULATOR': '1',
@@ -67,8 +64,9 @@ jobs:
                   mod_id = mod.get('id')
                   ET.SubElement(module_paths, 'MODULEPATH', {'id': mod_id, 'path': juce_modules_path})
           
+          # Simpan kembali file .jucer
           tree.write(jucer_path, encoding='utf-8', xml_declaration=True)
-          print(f"Sukses mengarahkan modul ke: {juce_modules_path}")
+          print("Konfigurasi .jucer selesai.")
 
       - name: Resave Jucer File
         run: |
@@ -76,7 +74,7 @@ jobs:
 
       - name: Build iOS App
         run: |
-          # Nama project di file .jucer Anda adalah SkyStreamRXV2
+          # Menggunakan target 'SkyStreamRXV2' sesuai isi file .jucer Anda
           xcodebuild -project NewProject/Builds/iOS/SkyStreamRXV2.xcodeproj \
                      -scheme "SkyStreamRXV2 - App" \
                      -configuration Release \
