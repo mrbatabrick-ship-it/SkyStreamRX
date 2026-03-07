@@ -79,21 +79,22 @@ jobs:
           Projucer --resave NewProject/NewProject.jucer --fix-missing-dependencies
 
       - name: Build iOS App
-        run: |
-          # Mematikan code signing agar build berhasil tanpa sertifikat resmi
+        run: |# Kita paksa output ke folder 'build' agar mudah ditemukan
           xcodebuild -project NewProject/Builds/iOS/SkyStreamRXV2.xcodeproj \
                      -scheme "SkyStreamRXV2 - App" \
                      -configuration Release \
                      -sdk iphoneos \
+                     CONFIGURATION_BUILD_DIR=$GITHUB_WORKSPACE/NewProject/Builds/iOS/build \
                      CODE_SIGNING_ALLOWED=NO \
                      CODE_SIGNING_REQUIRED=NO \
                      CODE_SIGN_IDENTITY="" \
-                     CODE_SIGN_ENTITLEMENTS="" \
                      AD_HOC_CODE_SIGNING_ALLOWED=YES \
-                     clean build
+                     build
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: SkyStream-iOS
+          # Kita ambil semua file .app yang ada di folder build tadi
+          path: NewProject/Builds/iOS/build/*.app
           path: NewProject/Builds/iOS/build/Release-iphoneos/SkyStream.app
