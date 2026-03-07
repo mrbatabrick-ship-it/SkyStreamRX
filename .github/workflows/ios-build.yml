@@ -1,96 +1,45 @@
-name: iOS Build
-
-on:
-  push:
-    branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
-
-jobs:
-  build-ios:
-    runs-on: macos-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Setup Xcode
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: latest-stable
-
-      - name: Build Projucer
-        run: |
-          git clone https://github.com/juce-framework/JUCE.git --depth 1
-          cd JUCE/extras/Projucer/Builds/MacOSX
-          xcodebuild -configuration Release -quiet
-          sudo cp build/Release/Projucer.app/Contents/MacOS/Projucer /usr/local/bin/
-
-      - name: Clean Slate Configuration (Python)
+      - name: Configure Jucer File (Python)
         shell: python
         run: |
           import xml.etree.ElementTree as ET
           import os
 
           jucer_path = 'NewProject/NewProject.jucer'
-          # Gunakan path relatif yang stabil
-          juce_modules_path = '../JUCE/modules'
+          juce_modules = os.path.abspath("JUCE/modules")
           
           tree = ET.parse(jucer_path)
           root = tree.getroot()
 
-          # 1. Matikan pengaturan global yang membingungkan Projucer
-          for mod in root.findall(".//MODULE"):
-              mod.set('useLocalCopy', '0')
-              mod.set('useGlobalPath', '0')
+          for mp in root.findall(".//MODULEPATH"):
+              mp.set("path", juce_modules)
 
-          # 2. HAPUS SEMUA EXPORTER (Android, dll) agar tidak ada error validasi path
           export_formats = root.find('EXPORTFORMATS')
-          if export_formats is not None:
-              for child in list(export_formats):
-                  export_formats.remove(child)
+          if export_formats is not None and root.find(".//XCODE_IPHONE") is None:
+              xcode_iphone = ET.SubElement(export_formats, 'XCODE_IPHONE', {
+                  'targetFolder': 'Builds/iOS',
+                  'appleCombinedIPHONEOS_IPHONESIMULATOR': '1',
+                  'iosScreenOrientation': 'UIInterfaceOrientationPortrait',
+                  'bundleIdentifier': 'com.skystream.rx' # Menambahkan ID aplikasi
+              })
+              configs = ET.SubElement(xcode_iphone, 'CONFIGURATIONS')
+              ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '1', 'name': 'Debug', 'targetName': 'SkyStream'})
+              ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '0', 'name': 'Release', 'targetName': 'SkyStream'})
+              
+              module_paths = ET.SubElement(xcode_iphone, 'MODULEPATHS')
+              for mod in root.findall(".//MODULES/MODULE"):
+                  mod_id = mod.get('id')
+                  ET.SubElement(module_paths, 'MODULEPATH', {'id': mod_id, 'path': juce_modules})
 
-          # 3. Tambahkan satu-satunya exporter iOS yang bersih
-          xcode_iphone = ET.SubElement(export_formats, 'XCODE_IPHONE', {
-              'targetFolder': 'Builds/iOS',
-              'appleCombinedIPHONEOS_IPHONESIMULATOR': '1',
-              'iosScreenOrientation': 'UIInterfaceOrientationPortrait'
-          })
-          
-          configs = ET.SubElement(xcode_iphone, 'CONFIGURATIONS')
-          ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '1', 'name': 'Debug', 'targetName': 'SkyStream'})
-          ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '0', 'name': 'Release', 'targetName': 'SkyStream'})
-          
-          module_paths = ET.SubElement(xcode_iphone, 'MODULEPATHS')
-          for mod in root.findall(".//MODULES/MODULE"):
-              mod_id = mod.get('id')
-              ET.SubElement(module_paths, 'MODULEPATH', {'id': mod_id, 'path': juce_modules_path})
-          
           tree.write(jucer_path, encoding='utf-8', xml_declaration=True)
-          print("File .jucer telah dibersihkan total dan disiapkan untuk iOS.")
-
-      - name: Resave Jucer File
-        run: |
-          # Gunakan flag fix-dependencies untuk berjaga-jaga
-          Projucer --resave NewProject/NewProject.jucer --fix-missing-dependencies
 
       - name: Build iOS App
         run: |
-          # Kita gunakan scheme standar JUCE: "NamaProject - App"
           xcodebuild -project NewProject/Builds/iOS/SkyStreamRXV2.xcodeproj \
                      -scheme "SkyStreamRXV2 - App" \
                      -configuration Release \
                      -sdk iphoneos \
                      CODE_SIGNING_ALLOWED=NO \
                      CODE_SIGNING_REQUIRED=NO \
+                     ENTITLEMENTS_REQUIRED=NO \
+                     AD_HOC_CODE_SIGNING_ALLOWED=YES \
                      clean build
-
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: SkyStream-iOS-Build
-          # Karena kita set targetName="SkyStream" di Python tadi,
-          # maka file yang dihasilkan akan bernama SkyStream.app
-          path: NewProject/Builds/iOS/build/Release-iphoneos/SkyStream.app
