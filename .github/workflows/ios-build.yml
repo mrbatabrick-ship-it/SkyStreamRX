@@ -11,81 +11,61 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
-      - name: Setup Xcode
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: latest-stable
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+
+      - name: Clone JUCE
+        run: |
+          git clone https://github.com/juce-framework/JUCE.git --depth 1
+
 
       - name: Build Projucer
         run: |
-          git clone https://github.com/juce-framework/JUCE.git --depth 1
           cd JUCE/extras/Projucer/Builds/MacOSX
           xcodebuild -configuration Release -quiet
           sudo cp build/Release/Projucer.app/Contents/MacOS/Projucer /usr/local/bin/
 
-      - name: Fix Jucer File (Python)
+
+      - name: Fix JUCE Module Paths
         shell: python
         run: |
           import xml.etree.ElementTree as ET
           import os
 
-          jucer_path = 'NewProject/NewProject.jucer'
-          # Ambil jalur absolut folder JUCE/modules di runner GitHub
+          jucer_file = "NewProject/NewProject.jucer"
           juce_modules = os.path.abspath("JUCE/modules")
-          
-          print(f"Mengarahkan semua modul ke path absolut: {juce_modules}")
 
-          tree = ET.parse(jucer_path)
+          tree = ET.parse(jucer_file)
           root = tree.getroot()
 
-          # 1. Perbaikan Global: Ganti SEMUA <MODULEPATH> di seluruh exporter (Android, dll)
           for mp in root.findall(".//MODULEPATH"):
               mp.set("path", juce_modules)
 
-          # 2. Tambahkan exporter XCODE_IPHONE jika belum ada
-          export_formats = root.find('EXPORTFORMATS')
-          if export_formats is not None and root.find(".//XCODE_IPHONE") is None:
-              print("Menambahkan exporter iOS...")
-              xcode_iphone = ET.SubElement(export_formats, 'XCODE_IPHONE', {
-                  'targetFolder': 'Builds/iOS',
-                  'appleCombinedIPHONEOS_IPHONESIMULATOR': '1'
-              })
-              configs = ET.SubElement(xcode_iphone, 'CONFIGURATIONS')
-              # Kita beri nama target 'SkyStream' sesuai permintaan Anda
-              ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '1', 'name': 'Debug', 'targetName': 'SkyStream'})
-              ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '0', 'name': 'Release', 'targetName': 'SkyStream'})
-              
-              module_paths = ET.SubElement(xcode_iphone, 'MODULEPATHS')
-              for mod in root.findall(".//MODULES/MODULE"):
-                  mod_id = mod.get('id')
-                  ET.SubElement(module_paths, 'MODULEPATH', {'id': mod_id, 'path': juce_modules})
+          tree.write(jucer_file)
 
-          # Simpan kembali file .jucer
-          tree.write(jucer_path, encoding='utf-8', xml_declaration=True)
-          print("File .jucer telah diperbaiki secara total.")
 
       - name: Resave Jucer File
         run: |
           Projucer --resave NewProject/NewProject.jucer
 
+
       - name: Build iOS App
         run: |
-          # Nama project Xcode biasanya mengikuti nama project di .jucer (SkyStreamRXV2)
-          xcodebuild -project NewProject/Builds/iOS/SkyStreamRXV2.xcodeproj \
-                     -scheme "SkyStream - App" \
-                     -configuration Release \
-                     -sdk iphoneos \
-                     CODE_SIGNING_ALLOWED=NO \
-                     CODE_SIGNING_REQUIRED=NO \
-                     clean build
+          xcodebuild \
+            -project NewProject/Builds/iOS/NewProject.xcodeproj \
+            -scheme "NewProject - App" \
+            -configuration Release \
+            -sdk iphoneos \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            clean build
+
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: SkyStream-iOS
-          path: NewProject/Builds/iOS/build/Release-iphoneos/*.app
+          path: |
+            NewProject/Builds/iOS/build/Release-iphoneos/*.app
