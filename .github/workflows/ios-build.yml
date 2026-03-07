@@ -78,9 +78,9 @@ jobs:
 
       - name: Build iOS App
         run: |
-          # Project name tetap SkyStreamRXV2 sesuai ID project, tapi target aplikasi adalah SkyStream
+          # Kita gunakan scheme standar JUCE: "NamaProject - App"
           xcodebuild -project NewProject/Builds/iOS/SkyStreamRXV2.xcodeproj \
-                     -scheme "SkyStream - App" \
+                     -scheme "SkyStreamRXV2 - App" \
                      -configuration Release \
                      -sdk iphoneos \
                      CODE_SIGNING_ALLOWED=NO \
@@ -90,5 +90,7 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SkyStream-iOS
-          path: NewProject/Builds/iOS/build/Release-iphoneos/*.app
+          name: SkyStream-iOS-Build
+          # Karena kita set targetName="SkyStream" di Python tadi,
+          # maka file yang dihasilkan akan bernama SkyStream.app
+          path: NewProject/Builds/iOS/build/Release-iphoneos/SkyStream.app
