@@ -1,0 +1,52 @@
+name: iOS Build
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:branches: [ main, master ]
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Build Projucer
+        run: |
+          # Mendownload JUCE untuk mendapatkan Projucer sebagai alat bantu build
+          git clone https://github.com/juce-framework/JUCE.git --depth 1
+          cd JUCE/extras/Projucer/Builds/MacOSX
+          xcodebuild -configuration Release -quiet
+          # Copy hasil build Projucer agar bisa dipanggil sebagai perintah global
+          sudo cp build/Release/Projucer.app/Contents/MacOS/Projucer /usr/local/bin/
+
+      - name: Resave Jucer File
+        run: |
+          # Kita arahkan ke folder NewProject karena file .jucer ada di sana
+          Projucer --resave NewProject/NewProject.jucer
+
+      - name: Build iOS App
+        run: |
+          # Melakukan kompilasi menggunakan Xcode project yang baru saja dibuat oleh Projucer
+          xcodebuild -project NewProject/Builds/iOS/NewProject.xcodeproj \
+                     -scheme "NewProject - App" \
+                     -configuration Release \
+                     -sdk iphoneos \
+                     CODE_SIGNING_ALLOWED=NO \
+                     CODE_SIGNING_REQUIRED=NO \
+                     clean build
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: SkyStream-iOS
+          path: NewProject/Builds/iOS/build/Release-iphoneos/*.app

@@ -1,0 +1,5 @@
+NewProject/Builds/
+NewProject/JuceLibraryCode/
+**/build/
+**/.cxx/
+**/.DS_Store
