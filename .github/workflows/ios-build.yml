@@ -8,9 +8,7 @@ on:
 
 jobs:
   build-ios:
-    runs-on: macos-latest
-
-    steps:
+    runs-on: macos-latest    steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
@@ -28,7 +26,7 @@ jobs:
           xcodebuild -configuration Release -quiet
           sudo cp build/Release/Projucer.app/Contents/MacOS/Projucer /usr/local/bin/
 
-      - name: Configure Jucer File (Python Script)
+      - name: Configure Jucer File (Python)
         shell: python
         run: |
           import xml.etree.ElementTree as ET
@@ -38,7 +36,8 @@ jobs:
           tree = ET.parse(jucer_path)
           root = tree.getroot()
 
-          # 1. Perbaiki semua path modul agar mengarah ke folder JUCE yang baru didownload
+          # 1. Pastikan semua modul mengarah ke folder JUCE yang baru didownload
+          # Di server, JUCE ada di root, jucer ada di NewProject/, jadi pathnya ../JUCE/modules
           for mp in root.findall(".//MODULEPATH"):
               mp.set('path', '../JUCE/modules')
 
@@ -55,17 +54,14 @@ jobs:
               ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '0', 'name': 'Release', 'targetName': 'SkyStreamRXV2'})
               
               module_paths = ET.SubElement(xcode_iphone, 'MODULEPATHS')
-              # Ambil daftar modul dari ANDROIDSTUDIO
-              android_mps = root.find(".//ANDROIDSTUDIO/MODULEPATHS")
-              if android_mps is not None:
-                  for mp in android_mps:
-                      ET.SubElement(module_paths, 'MODULEPATH', {
-                          'id': mp.get('id'),
-                          'path': '../JUCE/modules'
-                      })
+              # Salin daftar modul yang dibutuhkan
+              for mod in root.findall(".//MODULES/MODULE"):
+                  mod_id = mod.get('id')
+                  ET.SubElement(module_paths, 'MODULEPATH', {'id': mod_id, 'path': '../JUCE/modules'})
           
-          # Simpan kembali file .jucer yang sudah dimodifikasi
+          # Simpan kembali
           tree.write(jucer_path, encoding='utf-8', xml_declaration=True)
+          print("File .jucer berhasil dikonfigurasi untuk iOS.")
 
       - name: Resave Jucer File
         run: |
