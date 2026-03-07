@@ -232,8 +232,11 @@ public:
     MainComponent() : juce::Thread ("RXNetworkThread") {
         setOpaque(true);
         setBufferedToImage(false);
+#if JUCE_ANDROID
         acquireAndroidLocks(true);
         updateAndroidUI();
+        setScreenKeepOn(true);
+#endif
 
         setLookAndFeel(&lnf);
         for (int i = 0; i < 64; ++i) rxTracks.add(new RXTrack());
@@ -306,11 +309,17 @@ public:
 
         setAudioChannels(0, 2);
         startThread(juce::Thread::Priority::highest);
-        startTimerHz(20); setSize(400, 750); setScreenKeepOn(true);
+        startTimerHz(20); setSize(400, 750);
+#if JUCE_ANDROID
+        setScreenKeepOn(true);
+#endif
     }
 
     ~MainComponent() override {
-        acquireAndroidLocks(false); setScreenKeepOn(false);
+#if JUCE_ANDROID
+        acquireAndroidLocks(false);
+        setScreenKeepOn(false);
+#endif
         stopThread(2000); shutdownAudio(); setLookAndFeel(nullptr);
     }
 
