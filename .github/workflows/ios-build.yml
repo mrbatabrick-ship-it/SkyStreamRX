@@ -13,69 +13,62 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
-      - name: Setup Xcode
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: latest-stable
 
-      - name: Build Projucer
+      # Download JUCE
+      - name: Clone JUCE
         run: |
           git clone https://github.com/juce-framework/JUCE.git --depth 1
+
+
+      # Build Projucer
+      - name: Build Projucer
+        run: |
           cd JUCE/extras/Projucer/Builds/MacOSX
           xcodebuild -configuration Release -quiet
           sudo cp build/Release/Projucer.app/Contents/MacOS/Projucer /usr/local/bin/
 
-      - name: Configure Jucer File (Python)
+
+      # Perbaiki module path di .jucer
+      - name: Fix JUCE module paths
         shell: python
         run: |
           import xml.etree.ElementTree as ET
-          import os
 
-          jucer_path = 'NewProject/NewProject.jucer'
-          tree = ET.parse(jucer_path)
+          jucer_file = "NewProject/NewProject.jucer"
+
+          tree = ET.parse(jucer_file)
           root = tree.getroot()
 
-          # 1. Perbaiki semua path modul agar mengarah ke folder JUCE di server
-          for mp in root.findall(".//MODULEPATH"):
-              mp.set('path', '../JUCE/modules')
+          modules = root.find("MODULES")
 
-          # 2. Tambahkan exporter XCODE_IPHONE jika belum ada
-          export_formats = root.find('EXPORTFORMATS')
-          if export_formats is not None and root.find(".//XCODE_IPHONE") is None:
-              xcode_iphone = ET.SubElement(export_formats, 'XCODE_IPHONE', {
-                  'targetFolder': 'Builds/iOS',
-                  'appleCombinedIPHONEOS_IPHONESIMULATOR': '1',
-                  'iosScreenOrientation': 'UIInterfaceOrientationPortrait'
-              })
-              configs = ET.SubElement(xcode_iphone, 'CONFIGURATIONS')
-              ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '1', 'name': 'Debug', 'targetName': 'SkyStreamRXV2'})
-              ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '0', 'name': 'Release', 'targetName': 'SkyStreamRXV2'})
-              
-              module_paths = ET.SubElement(xcode_iphone, 'MODULEPATHS')
-              for mod in root.findall(".//MODULES/MODULE"):
-                  mod_id = mod.get('id')
-                  ET.SubElement(module_paths, 'MODULEPATH', {'id': mod_id, 'path': '../JUCE/modules'})
-          
-          tree.write(jucer_path, encoding='utf-8', xml_declaration=True)
-          print("File .jucer berhasil dikonfigurasi.")
+          if modules is not None:
+              for module in modules:
+                  module.set("path", "../JUCE/modules")
 
+          tree.write(jucer_file)
+
+
+      # Generate project
       - name: Resave Jucer File
         run: |
           Projucer --resave NewProject/NewProject.jucer
 
+
+      # Build iOS
       - name: Build iOS App
         run: |
-          xcodebuild -project NewProject/Builds/iOS/SkyStreamRXV2.xcodeproj \
-                     -scheme "SkyStreamRXV2 - App" \
-                     -configuration Release \
-                     -sdk iphoneos \
-                     CODE_SIGNING_ALLOWED=NO \
-                     CODE_SIGNING_REQUIRED=NO \
-                     clean build
+          xcodebuild \
+            -project NewProject/Builds/iOS/NewProject.xcodeproj \
+            -scheme "NewProject - App" \
+            -configuration Release \
+            -sdk iphoneos \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            clean build
 
+
+      # Upload build
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
