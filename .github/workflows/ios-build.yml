@@ -3,7 +3,8 @@ name: iOS Build
 on:
   push:
     branches: [ main, master ]
-  pull_request:branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
 
 jobs:
   build-ios:
@@ -31,7 +32,7 @@ jobs:
 
       - name: Resave Jucer File
         run: |
-          # Kita arahkan ke folder NewProject karena file .jucer ada di sana
+          # Arahkan ke folder NewProject karena file .jucer ada di sana
           Projucer --resave NewProject/NewProject.jucer
 
       - name: Build iOS App
