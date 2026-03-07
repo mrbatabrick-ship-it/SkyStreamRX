@@ -3,8 +3,7 @@ name: iOS Build
 on:
   push:
     branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
+  pull_request:branches: [ main, master ]
 
 jobs:
   build-ios:
@@ -28,7 +27,7 @@ jobs:
           xcodebuild -configuration Release -quiet
           sudo cp build/Release/Projucer.app/Contents/MacOS/Projucer /usr/local/bin/
 
-      - name: Configure Jucer File (Python)
+      - name: Clean Slate Configuration (Python)
         shell: python
         run: |
           import xml.etree.ElementTree as ET
@@ -40,24 +39,26 @@ jobs:
           tree = ET.parse(jucer_path)
           root = tree.getroot()
 
-          # 1. Perbaiki semua path modul secara global
-          for mp in root.findall(".//MODULEPATH"):
-              mp.set("path", juce_modules)
+          # 1. Matikan pengaturan global
+          for mod in root.findall(".//MODULE"):
+              mod.set('useLocalCopy', '0')
+              mod.set('useGlobalPath', '0')
 
-          # 2. Hapus exporter lama dan tambahkan exporter iOS yang bersih
+          # 2. Hapus semua exporter lama (Android, dll)
           export_formats = root.find('EXPORTFORMATS')
           if export_formats is not None:
               for child in list(export_formats):
                   export_formats.remove(child)
 
+          # 3. Tambahkan satu exporter iOS yang bersih
           xcode_iphone = ET.SubElement(export_formats, 'XCODE_IPHONE', {
               'targetFolder': 'Builds/iOS',
               'appleCombinedIPHONEOS_IPHONESIMULATOR': '1',
-              'iosScreenOrientation': 'UIInterfaceOrientationPortrait'
+              'iosScreenOrientation': 'UIInterfaceOrientationPortrait',
+              'bundleIdentifier': 'com.skystream.rx'
           })
           
           configs = ET.SubElement(xcode_iphone, 'CONFIGURATIONS')
-          # Kita beri nama target 'SkyStream'
           ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '1', 'name': 'Debug', 'targetName': 'SkyStream'})
           ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '0', 'name': 'Release', 'targetName': 'SkyStream'})
           
@@ -65,9 +66,7 @@ jobs:
           for mod in root.findall(".//MODULES/MODULE"):
               mod_id = mod.get('id')
               ET.SubElement(module_paths, 'MODULEPATH', {'id': mod_id, 'path': juce_modules})
-              mod.set('useLocalCopy', '0')
-              mod.set('useGlobalPath', '0')
-
+          
           tree.write(jucer_path, encoding='utf-8', xml_declaration=True)
 
       - name: Resave Jucer File
@@ -76,16 +75,17 @@ jobs:
 
       - name: Build iOS App
         run: |
-          # Projucer menamai xcodeproj sesuai nama project di .jucer (SkyStreamRXV2)
-          # Tapi nama skema biasanya tetap menggunakan nama project lama: "SkyStreamRXV2 - App"
+          # Perbaikan kunci: Menambahkan flag untuk mematikan signing secara total
           xcodebuild -project NewProject/Builds/iOS/SkyStreamRXV2.xcodeproj \
                      -scheme "SkyStreamRXV2 - App" \
                      -configuration Release \
                      -sdk iphoneos \
                      CODE_SIGNING_ALLOWED=NO \
                      CODE_SIGNING_REQUIRED=NO \
-                     AD_HOC_CODE_SIGNING_ALLOWED=YES \
-                     clean build
+                     CODE_SIGN_IDENTITY="" \
+                     CODE_SIGN_ENTITLEMENTS="" \
+                     GCC_GENERATE_DEBUGGING_SYMBOLS=NO \
+                     build
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
