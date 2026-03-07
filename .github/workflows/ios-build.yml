@@ -28,9 +28,28 @@ jobs:
           sudo cp build/Release/Projucer.app/Contents/MacOS/Projucer /usr/local/bin/
 
 
+      - name: Fix JUCE Module Paths
+        shell: python
+        run: |
+          import xml.etree.ElementTree as ET
+          import os
+
+          jucer_file = "NewProject/NewProject.jucer"
+
+          tree = ET.parse(jucer_file)
+          root = tree.getroot()
+
+          juce_root = os.path.abspath("JUCE")
+
+          for mp in root.findall(".//MODULEPATH"):
+              mp.set("path", juce_root)
+
+          tree.write(jucer_file)
+
+
       - name: Resave Jucer File
         run: |
-          Projucer --juce-modules="$PWD/JUCE/modules" --resave NewProject/NewProject.jucer
+          Projucer --resave NewProject/NewProject.jucer
 
 
       - name: Build iOS App
@@ -45,7 +64,7 @@ jobs:
             clean build
 
 
-      - name: Upload iOS Artifact
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: SkyStream-iOS
