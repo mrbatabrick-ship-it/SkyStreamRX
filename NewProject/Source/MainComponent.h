@@ -10,9 +10,13 @@
 #include <thread>
 #include <chrono>
 
+// Pindahkan include ini ke luar agar bisa dibaca iOS dan Android
+#if JUCE_ANDROID || JUCE_IOS
+#include <sys/socket.h>
+#endif
+
 #if JUCE_ANDROID
 #include <jni.h>
-#include <sys/socket.h>
 
 namespace juce
 {
@@ -299,7 +303,7 @@ public:
             for (int i = 1; i <= 4; ++i) udpSocket.joinMulticast("239.255.0." + juce::String(i));
             int handle = udpSocket.getRawSocketHandle();
             int rcvBufSize = 4 * 1024 * 1024;
-#if !JUCE_IOS
+#if JUCE_ANDROID || JUCE_IOS
             setsockopt(handle, SOL_SOCKET, SO_RCVBUF, (const char*)&rcvBufSize, sizeof(rcvBufSize));
 #endif
         }
