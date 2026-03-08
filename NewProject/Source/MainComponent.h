@@ -125,20 +125,13 @@ struct RXTrack {
     std::atomic<bool> lowLatencyMode { false };
     const int normalTarget = 720;
     const int lowLatencyTarget = 256;
-    const int fallbackTarget = 480;
     std::atomic<double> fractionalReadPos { 0.0 };
     std::atomic<double> playbackRate { 1.0 };
-    std::atomic<uint64_t> totalSamplesPlayed { 0 };
-    std::atomic<uint32_t> startTimeMs { 0 };
-    std::atomic<uint32_t> lastAdjustMs { 0 };
-    std::atomic<int> underflowCounter { 0 };
     std::atomic<uint32_t> lastUnderflowMs { 0 };
-    std::atomic<bool> fallbackActive { false };
 
     RXTrack() {
         buffer.clear(); std::memset(trackName, 0, 20);
-        startTimeMs.store(juce::Time::getMillisecondCounter());
-        lastAdjustMs.store(startTimeMs.load());
+        lastUnderflowMs.store(juce::Time::getMillisecondCounter());
     }
 
     void reset() {
@@ -147,12 +140,6 @@ struct RXTrack {
         lastSequenceReceived.store(0);
         fractionalReadPos.store(0.0);
         playbackRate.store(1.0);
-        totalSamplesPlayed.store(0);
-        uint32_t now = juce::Time::getMillisecondCounter();
-        startTimeMs.store(now);
-        lastAdjustMs.store(now);
-        fallbackActive.store(false);
-        underflowCounter.store(0);
         adaptivePrebuffer.store(lowLatencyMode.load() ? lowLatencyTarget : normalTarget);
     }
 };
@@ -175,7 +162,6 @@ public:
         juce::Rectangle<float> knob ((float)slider.getLocalBounds().getX() + ((float)slider.getLocalBounds().getWidth() / 2.0f) - (knobWidth * 0.5f),
                                      sliderPos - (knobHeight * 0.5f), knobWidth, knobHeight);
 
-        // Deep Neumorphic knob shadow
         g.setColour(juce::Colour(0xff050505));
         g.fillRoundedRectangle(knob.translated(4.5f, 4.5f), 4.0f);
         g.setColour(juce::Colour(0xff3a3a3a));
@@ -205,22 +191,16 @@ public:
             g.setColour(button.getToggleState() ? backgroundColour.withAlpha(0.5f) : juce::Colours::black.withAlpha(0.4f));
             g.fillRoundedRectangle(bounds, cornerSize);
         } else {
-            // Elevated 3D Shadow
             g.setColour(darkShadow);
             g.fillRoundedRectangle(bounds.translated(5.0f, 5.0f), cornerSize);
             g.setColour(lightShadow);
             g.fillRoundedRectangle(bounds.translated(-2.5f, -2.5f), cornerSize);
-
-            // Subtle Surface Gradient for metallic feel
             juce::ColourGradient surface(juce::Colour(0xff2d2d2d), bounds.getX(), bounds.getY(),
                                          juce::Colour(0xff1a1a1a), bounds.getRight(), bounds.getBottom(), false);
             g.setGradientFill(surface);
             g.fillRoundedRectangle(bounds, cornerSize);
-
-            // Fine bezel highlight line
             g.setColour(juce::Colours::white.withAlpha(0.08f));
             g.drawRoundedRectangle(bounds.reduced(0.5f), cornerSize, 1.0f);
-
             if (shouldDrawButtonAsHighlighted) {
                 g.setColour(juce::Colours::white.withAlpha(0.05f));
                 g.fillRoundedRectangle(bounds, cornerSize);
@@ -238,8 +218,8 @@ public:
 #if JUCE_ANDROID
         acquireAndroidLocks(true);
         updateAndroidUI();
-        setScreenKeepOn(true);
 #endif
+        setScreenKeepOn(true);
 
         setLookAndFeel(&lnf);
         for (int i = 0; i < 64; ++i) rxTracks.add(new RXTrack());
@@ -278,8 +258,6 @@ public:
         mainFader.setRange(-70.0, 12.0, 0.1);
         mainFader.setValue(0.0);
         mainFader.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-        mainFader.setDoubleClickReturnValue(true, 0.0);
-        mainFader.setVelocityBasedMode(false);
 
         addAndMakeVisible(faderLevelLabel);
         faderLevelLabel.setText("0.0 dB", juce::dontSendNotification);
@@ -298,14 +276,7 @@ public:
         lockButton.setButtonText("LOCK"); lockButton.setClickingTogglesState(true);
         lockButton.onClick = [this] { updateAODState(); };
 
-        if (udpSocket.bindToPort(54321, "")) {
-            for (int i = 1; i <= 4; ++i) udpSocket.joinMulticast("239.255.0." + juce::String(i));
-            int handle = udpSocket.getRawSocketHandle();
-            int rcvBufSize = 4 * 1024 * 1024;
-#if JUCE_ANDROID || JUCE_IOS
-            setsockopt(handle, SOL_SOCKET, SO_RCVBUF, (const char*)&rcvBufSize, sizeof(rcvBufSize));
-#endif
-        }
+        setupSocket();
 
         juce::AudioDeviceManager::AudioDeviceSetup setup;
         deviceManager.getAudioDeviceSetup(setup);
@@ -315,45 +286,44 @@ public:
         setAudioChannels(0, 2);
         startThread(juce::Thread::Priority::highest);
         startTimerHz(20); setSize(400, 750);
-#if JUCE_ANDROID
-        setScreenKeepOn(true);
-#endif
     }
 
     ~MainComponent() override {
 #if JUCE_ANDROID
         acquireAndroidLocks(false);
-        setScreenKeepOn(false);
 #endif
+        setScreenKeepOn(false);
         stopThread(2000); shutdownAudio(); setLookAndFeel(nullptr);
+    }
+
+    void setupSocket() {
+        if (udpSocket.bindToPort(54321, "")) {
+            for (int i = 1; i <= 4; ++i) udpSocket.joinMulticast("239.255.0." + juce::String(i));
+            int handle = udpSocket.getRawSocketHandle();
+            int rcvBufSize = 4 * 1024 * 1024;
+#if JUCE_ANDROID || JUCE_IOS
+            setsockopt(handle, SOL_SOCKET, SO_RCVBUF, (const char*)&rcvBufSize, sizeof(rcvBufSize));
+#endif
+        }
     }
 
     void buildBackgroundCache() {
         backgroundCache = juce::Image(juce::Image::RGB, getWidth(), getHeight(), true);
         juce::Graphics g(backgroundCache);
-
-        // 1. Base Deep Grey
         g.fillAll(juce::Colour(0xff121212));
-
-        // 2. Grain Texture (Enhanced visibility)
         juce::Random r;
         for (int i = 0; i < 40000; ++i) {
             g.setColour(juce::Colours::white.withAlpha(r.nextFloat() * 0.035f));
             g.fillRect(r.nextInt(getWidth()), r.nextInt(getHeight()), 1, 1);
         }
-
-        // 3. Vignette Effect (Stronger depth)
         juce::ColourGradient vignette (juce::Colours::transparentBlack, (float)getWidth()/2.0f, (float)getHeight()/2.0f,
                                        juce::Colours::black.withAlpha(0.7f), 0.0f, 0.0f, true);
         g.setGradientFill(vignette);
         g.fillAll();
-
-        // 4. Layout lines
         g.setColour(juce::Colours::black.withAlpha(0.4f));
         g.drawLine(0, 80, (float)getWidth(), 80, 2.0f);
         g.setColour(juce::Colours::white.withAlpha(0.03f));
         g.drawLine(0, 81, (float)getWidth(), 81, 1.0f);
-
         if (dbScaleImage.isValid()) {
             int centerX = (int)(mainFader.getX() + (mainFader.getWidth() / 2));
             g.setOpacity(0.6f);
@@ -442,6 +412,7 @@ public:
         int ready = t->fifo.getNumReady();
         int targetPrebuffer = t->adaptivePrebuffer.load();
         uint32_t now = juce::Time::getMillisecondCounter();
+
         if (ready < targetPrebuffer / 2) {
             if (now - t->lastUnderflowMs.load() > 200) {
                 int newTarget = juce::jmin(targetPrebuffer + 64, t->maxPrebuffer);
@@ -454,63 +425,55 @@ public:
             t->adaptivePrebuffer.store(newTarget);
             targetPrebuffer = newTarget;
         }
+
         if (!t->isInitialized.load()) {
             if (ready >= targetPrebuffer) t->isInitialized.store(true);
             else { t->lastGain = 0.0f; return; }
         }
-        if (ready < bufferToFill.numSamples) { t->lastGain = 0.0f; t->healthStatus.store(2); return; }
+        if (ready < bufferToFill.numSamples + 10) { t->lastGain = 0.0f; t->healthStatus.store(2); return; }
 
-        int numOutChannels = bufferToFill.buffer->getNumChannels();
+        float targetGain = juce::Decibels::decibelsToGain((float)mainFader.getValue());
+        auto* outL = bufferToFill.buffer->getWritePointer(0, bufferToFill.startSample);
+        auto* fifoData = t->buffer.getReadPointer(0);
+        int fifoSize = t->buffer.getNumSamples();
+        int s1_raw, z1_raw, s2_raw, z2_raw;
+        t->fifo.prepareToRead(ready, s1_raw, z1_raw, s2_raw, z2_raw);
+        int fifoReadStart = s1_raw;
+
+        double error = (double)ready - (double)targetPrebuffer;
+        double correction = 0.0;
 
         if (t->lowLatencyMode.load()) {
-            int driftLimit = targetPrebuffer + 128;
-            if (ready > driftLimit) { t->fifo.finishedRead(ready - targetPrebuffer); ready = t->fifo.getNumReady(); }
-            float targetGain = juce::Decibels::decibelsToGain((float)mainFader.getValue());
-            auto* outL = bufferToFill.buffer->getWritePointer(0, bufferToFill.startSample);
-            int s1, z1, s2, z2;
-            t->fifo.prepareToRead(bufferToFill.numSamples, s1, z1, s2, z2);
-            if (z1 > 0) juce::FloatVectorOperations::copy(outL, t->buffer.getReadPointer(0, s1), z1);
-            if (z2 > 0) juce::FloatVectorOperations::copy(outL + z1, t->buffer.getReadPointer(0, s2), z2);
-            for (int i = 0; i < bufferToFill.numSamples; ++i) {
-                float g = t->lastGain + (targetGain - t->lastGain) * ((float)i / (float)bufferToFill.numSamples);
-                outL[i] *= g;
-            }
-            t->fifo.finishedRead(bufferToFill.numSamples); t->lastGain = targetGain;
-            if (numOutChannels > 1)
-                bufferToFill.buffer->copyFrom(1, bufferToFill.startSample, *bufferToFill.buffer, 0, bufferToFill.startSample, bufferToFill.numSamples);
+            correction = (std::abs(error) < 64.0) ? error * 0.000005 : error * 0.000020;
+            t->playbackRate.store(juce::jlimit(0.9970, 1.0030, 1.0 + correction));
         } else {
-            int catchupLimit = targetPrebuffer + 256;
-            if (ready > catchupLimit) { t->fifo.finishedRead(ready - targetPrebuffer); ready = t->fifo.getNumReady(); }
-            float targetGain = juce::Decibels::decibelsToGain((float)mainFader.getValue());
-            auto* outL = bufferToFill.buffer->getWritePointer(0, bufferToFill.startSample);
-            auto* fifoData = t->buffer.getReadPointer(0);
-            int fifoSize = t->buffer.getNumSamples();
-            int s1_raw, z1_raw, s2_raw, z2_raw;
-            t->fifo.prepareToRead(ready, s1_raw, z1_raw, s2_raw, z2_raw);
-            int fifoReadStart = s1_raw;
-            double error = (double)ready - (double)targetPrebuffer;
-            double correction = (std::abs(error) < 150.0) ? error * 0.0000025 : error * 0.0000080;
+            correction = (std::abs(error) < 150.0) ? error * 0.0000025 : error * 0.0000080;
             t->playbackRate.store(juce::jlimit(0.9985, 1.0015, 1.0 + correction));
-            double currentPlaybackRate = t->playbackRate.load();
-            double currentReadPos = t->fractionalReadPos.load();
-            for (int i = 0; i < bufferToFill.numSamples; ++i) {
-                int idx1 = (int)currentReadPos; int idx2 = idx1 + 1;
-                if (idx2 >= ready) break;
-                float samp1 = fifoData[(fifoReadStart + idx1) % fifoSize];
-                float samp2 = fifoData[(fifoReadStart + idx2) % fifoSize];
-                float frac = (float)(currentReadPos - (double)idx1);
-                float sample = samp1 + (samp2 - samp1) * frac;
-                float g = t->lastGain + (targetGain - t->lastGain) * ((float)i / (float)bufferToFill.numSamples);
-                outL[i] = sample * g;
-                currentReadPos += currentPlaybackRate;
-            }
-            int consumed = (int)currentReadPos;
-            t->fractionalReadPos.store(currentReadPos - (double)consumed);
-            t->fifo.finishedRead(consumed);
-            t->lastGain = targetGain;
-            if (numOutChannels > 1)
-                bufferToFill.buffer->copyFrom(1, bufferToFill.startSample, *bufferToFill.buffer, 0, bufferToFill.startSample, bufferToFill.numSamples);
         }
+
+        double currentPlaybackRate = t->playbackRate.load();
+        double currentReadPos = t->fractionalReadPos.load();
+
+        for (int i = 0; i < bufferToFill.numSamples; ++i) {
+            int idx1 = (int)currentReadPos; int idx2 = idx1 + 1;
+            if (idx2 >= ready) break;
+            float samp1 = fifoData[(fifoReadStart + idx1) % fifoSize];
+            float samp2 = fifoData[(fifoReadStart + idx2) % fifoSize];
+            float frac = (float)(currentReadPos - (double)idx1);
+            float sample = samp1 + (samp2 - samp1) * frac;
+            float g = t->lastGain + (targetGain - t->lastGain) * ((float)i / (float)bufferToFill.numSamples);
+            outL[i] = sample * g;
+            currentReadPos += currentPlaybackRate;
+        }
+
+        int consumed = (int)currentReadPos;
+        t->fractionalReadPos.store(currentReadPos - (double)consumed);
+        t->fifo.finishedRead(consumed);
+        t->lastGain = targetGain;
+
+        if (bufferToFill.buffer->getNumChannels() > 1)
+            bufferToFill.buffer->copyFrom(1, bufferToFill.startSample, *bufferToFill.buffer, 0, bufferToFill.startSample, bufferToFill.numSamples);
+
         t->currentLevelDb.store(juce::Decibels::gainToDecibels(bufferToFill.buffer->getRMSLevel(0, bufferToFill.startSample, bufferToFill.numSamples)));
         t->healthStatus.store(ready < targetPrebuffer / 2 ? 1 : 0);
     }
@@ -533,7 +496,7 @@ public:
             }
             if (wifiMgr != nullptr && wifiLock == nullptr) {
                 juce::LocalRef<jstring> tag (env->NewStringUTF ("SkyStreamWifiLock"));
-                juce::LocalRef<jobject> lock (env->CallObjectMethod (wifiMgr.get(), juce::WifiManager.createWifiLock, 4, tag.get()));
+                juce::LocalRef<jobject> lock (env->CallObjectMethod (wifiMgr.get(), juce::WifiManager.createWifiLock, 3, tag.get()));
                 if (lock != nullptr) {
                     wifiLock = env->NewGlobalRef (lock.get());
                     env->CallVoidMethod (wifiLock, juce::WifiLock.setReferenceCounted, false);
@@ -595,13 +558,9 @@ public:
             m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&channelDisplayLabel), [this](int r) {
                 if (r >= 100) {
                     int newIdx = r - 100;
-                    int oldIdx = currentTrackIdx.load();
-                    if (newIdx != oldIdx) {
-                        if (oldIdx >= 0) rxTracks[oldIdx]->reset();
+                    if (newIdx != currentTrackIdx.load()) {
                         rxTracks[newIdx]->reset();
                         currentTrackIdx.store(newIdx);
-                        latencyButton.setToggleState(rxTracks[newIdx]->lowLatencyMode.load(), juce::dontSendNotification);
-                        latencyButton.setButtonText(rxTracks[newIdx]->lowLatencyMode.load() ? "RHYTHM" : "ORCH");
                     }
                 }
             });
@@ -609,18 +568,18 @@ public:
     }
 
     void timerCallback() override {
+        uint32_t now = juce::Time::getMillisecondCounter();
+        if (now - lastPacketTime.load() > 2500) {
+            for (int i = 1; i <= 4; ++i) udpSocket.joinMulticast("239.255.0." + juce::String(i));
+            lastPacketTime.store(now - 1000);
+        }
+
         int idx = currentTrackIdx.load();
         if (idx >= 0 && isReceiving.load()) {
             auto* t = rxTracks[idx];
-            mainFader.getProperties().set("level", t->currentLevelDb.load());
             juce::String name = (t->trackName[0] == 0) ? "CH " + juce::String(idx+1) : juce::String(t->trackName);
             if (channelDisplayLabel.getText() != name) channelDisplayLabel.setText(name, juce::dontSendNotification);
-            static int lastDispReady = 0;
-            int currentReady = t->fifo.getNumReady();
-            if (std::abs(currentReady - lastDispReady) > 10) {
-                statsLabel.setText("Buf: " + juce::String(currentReady) + " | Tgt: " + juce::String(t->adaptivePrebuffer.load()), juce::dontSendNotification);
-                lastDispReady = currentReady;
-            }
+            statsLabel.setText("Buf: " + juce::String(t->fifo.getNumReady()) + " | Tgt: " + juce::String(t->adaptivePrebuffer.load()), juce::dontSendNotification);
             repaint();
         } else {
             channelDisplayLabel.setText(isReceiving.load() ? "SELECT" : "NO SIGNAL", juce::dontSendNotification);
@@ -636,7 +595,6 @@ public:
         juce::Colour lightShadow = juce::Colour(0xff303030);
         juce::Colour darkShadow = juce::Colour(0xff0d0d0d);
 
-        // Display Area Inset (Neumorphic)
         auto displayArea = channelDisplayLabel.getBounds().toFloat().expanded(10, 5);
         g.setColour(darkShadow);
         g.fillRoundedRectangle(displayArea.translated(1, 1), 10.0f);
@@ -645,14 +603,12 @@ public:
         g.setColour(juce::Colours::black.withAlpha(0.3f));
         g.fillRoundedRectangle(displayArea, 10.0f);
 
-        // Meter Logic Integrated with Fader Area
         auto fBounds = mainFader.getBounds().toFloat();
         float meterW = 12.0f;
         float meterX = fBounds.getX() + (fBounds.getWidth() / 2.0f) - (meterW / 2.0f);
         float meterY = fBounds.getY() + 10.0f;
         float meterH = fBounds.getHeight() - 20.0f;
 
-        // Meter "Well" Inset
         g.setColour(darkShadow);
         g.fillRoundedRectangle(meterX + 1, meterY + 1, meterW, meterH, 3.0f);
         g.setColour(lightShadow);
@@ -663,11 +619,7 @@ public:
         int idx = currentTrackIdx.load();
         if (idx >= 0 && isReceiving.load()) {
             float level = rxTracks[idx]->currentLevelDb.load();
-            static float smoothedLevel = -100.0f;
-            if (level > smoothedLevel) smoothedLevel = smoothedLevel * 0.5f + level * 0.5f;
-            else                    smoothedLevel = smoothedLevel * 0.8f + level * 0.2f;
-
-            float lvlGain = juce::jlimit(0.0f, 1.0f, juce::jmap(smoothedLevel, -60.0f, 6.0f, 0.0f, 1.0f));
+            float lvlGain = juce::jlimit(0.0f, 1.0f, juce::jmap(level, -60.0f, 6.0f, 0.0f, 1.0f));
             int fillH = (int)(lvlGain * meterH);
             juce::ColourGradient meterGrad(juce::Colours::green, meterX, meterY + meterH, juce::Colours::red, meterX, meterY, false);
             meterGrad.addColour(0.6, juce::Colours::yellow);
@@ -675,11 +627,9 @@ public:
             g.fillRect(meterX, (meterY + meterH) - (float)fillH, meterW, (float)fillH);
         }
 
-        // Health Dot
         juce::Colour healthCol = juce::Colours::grey;
         if (isReceiving.load() && idx >= 0) {
-            auto* t = rxTracks[idx];
-            int status = t->healthStatus.load();
+            int status = rxTracks[idx]->healthStatus.load();
             healthCol = (status == 0) ? juce::Colours::green : (status == 1) ? juce::Colours::yellow : juce::Colours::red;
         }
         g.setColour(healthCol);
@@ -714,7 +664,6 @@ public:
             float normalizedVal = (dbVal - (-70.0f)) / (12.0f - (-70.0f));
             float y = (1.0f - normalizedVal) * (float)mainFader.getHeight();
             imgG.drawLine(0, y, (float)stickerW, y, 0.5f);
-            imgG.setFont(10.0f);
             imgG.drawText(juce::String(dbVal, 0), 2, (int)y - 12, 30, 10, juce::Justification::bottomLeft);
         }
         buildBackgroundCache();
@@ -727,8 +676,7 @@ private:
     std::atomic<int> currentTrackIdx { -1 };
     std::atomic<bool> isReceiving { false };
     std::atomic<uint32_t> lastPacketTime { 0 };
-    juce::Image dbScaleImage;
-    juce::Image backgroundCache;
+    juce::Image dbScaleImage, backgroundCache;
 #if JUCE_ANDROID
     jobject multicastLock = nullptr; jobject wakeLock = nullptr; jobject wifiLock = nullptr;
 #endif
