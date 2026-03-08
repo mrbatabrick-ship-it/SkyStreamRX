@@ -1,4 +1,4 @@
-name: iOS Build
+name: iOS Build (SkyStream Final)
 
 on:
   push:
@@ -10,25 +10,34 @@ jobs:
   build-ios:
     runs-on: macos-latest
 
-    steps:
-      - name: Checkout code
+    steps:      - name: Checkout code
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Setup Xcode
-        uses: maxim-lobanov/setup-xcode@v1
+      - name: Build Projucer (Cached)
+        id: cache-juce
+        uses: actions/cache@v4
         with:
-          xcode-version: latest-stable
+          path: |
+            JUCE
+            /usr/local/bin/Projucer
+          key: ${{ runner.os }}-juce-v1
 
-      - name: Build Projucer
+      - name: Clone and Build Projucer
+        if: steps.cache-juce.outputs.cache-hit != 'true'
         run: |
           git clone https://github.com/juce-framework/JUCE.git --depth 1
           cd JUCE/extras/Projucer/Builds/MacOSX
           xcodebuild -configuration Release -quiet
           sudo cp build/Release/Projucer.app/Contents/MacOS/Projucer /usr/local/bin/
 
-      - name: Configure Jucer File (Python Script)
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Configure Jucer File (Python)
         shell: python
         run: |
           import xml.etree.ElementTree as ET
@@ -36,15 +45,14 @@ jobs:
 
           jucer_path = 'NewProject/NewProject.jucer'
           juce_modules = os.path.abspath("JUCE/modules")
-          # Path icon relatif terhadap file .jucer
           icon_path = 'Source/icon.png'
           
           tree = ET.parse(jucer_path)
           root = tree.getroot()
 
-          # 1. Pasang Icon ke Project agar muncul di iPhone
+          # 1. Pasang Icon dan Nama Project
           root.set('iconBig', icon_path)
-
+          
           # 2. Perbaiki SEMUA path modul secara global
           for mp in root.findall(".//MODULEPATH"):
               mp.set("path", juce_modules)
@@ -58,14 +66,14 @@ jobs:
               for child in list(export_formats):
                   export_formats.remove(child)
 
-          # Tambahkan NSLocalNetworkUsageDescription agar TIDAK CRASH saat pilih channel
+          # Tambahkan Izin Jaringan agar TIDAK FORCE CLOSE
           plist_extras = """
           <plist>
             <dict>
               <key>NSLocalNetworkUsageDescription</key>
-              <string>SkyStream RX membutuhkan akses jaringan lokal untuk menerima data audio dari TX.</string>
+              <string>SkyStream membutuhkan akses jaringan lokal untuk menerima aliran audio.</string>
               <key>NSBluetoothAlwaysUsageDescription</key>
-              <string>SkyStream RX membutuhkan akses bluetooth untuk output audio.</string>
+              <string>SkyStream membutuhkan akses bluetooth untuk audio device.</string>
             </dict>
           </plist>
           """
@@ -79,9 +87,9 @@ jobs:
           })
           
           configs = ET.SubElement(xcode_iphone, 'CONFIGURATIONS')
-          # Kita set targetName tetap SkyStreamRXV2 agar scheme konsisten
-          ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '1', 'name': 'Debug', 'targetName': 'SkyStreamRXV2'})
-          ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '0', 'name': 'Release', 'targetName': 'SkyStreamRXV2'})
+          # MENGESET NAMA APLIKASI MENJADI "SkyStream"
+          ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '1', 'name': 'Debug', 'targetName': 'SkyStream'})
+          ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '0', 'name': 'Release', 'targetName': 'SkyStream'})
           
           module_paths = ET.SubElement(xcode_iphone, 'MODULEPATHS')
           for mod in root.findall(".//MODULES/MODULE"):
@@ -96,9 +104,9 @@ jobs:
 
       - name: Build iOS App
         run: |
-          # Menggunakan Scheme default: "NamaProject - App"
+          # Sekarang nama scheme adalah "SkyStream - App"
           xcodebuild -project NewProject/Builds/iOS/SkyStreamRXV2.xcodeproj \
-                     -scheme "SkyStreamRXV2 - App" \
+                     -scheme "SkyStream - App" \
                      -configuration Release \
                      -sdk iphoneos \
                      CONFIGURATION_BUILD_DIR=$GITHUB_WORKSPACE/NewProject/Builds/iOS/build \
