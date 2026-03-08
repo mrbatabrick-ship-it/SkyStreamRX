@@ -461,6 +461,8 @@ public:
         }
         if (ready < bufferToFill.numSamples) { t->lastGain = 0.0f; t->healthStatus.store(2); return; }
 
+        int numOutChannels = bufferToFill.buffer->getNumChannels();
+
         if (t->lowLatencyMode.load()) {
             int driftLimit = targetPrebuffer + 128;
             if (ready > driftLimit) { t->fifo.finishedRead(ready - targetPrebuffer); ready = t->fifo.getNumReady(); }
@@ -475,7 +477,8 @@ public:
                 outL[i] *= g;
             }
             t->fifo.finishedRead(bufferToFill.numSamples); t->lastGain = targetGain;
-            bufferToFill.buffer->copyFrom(1, bufferToFill.startSample, *bufferToFill.buffer, 0, bufferToFill.startSample, bufferToFill.numSamples);
+            if (numOutChannels > 1)
+                bufferToFill.buffer->copyFrom(1, bufferToFill.startSample, *bufferToFill.buffer, 0, bufferToFill.startSample, bufferToFill.numSamples);
         } else {
             int catchupLimit = targetPrebuffer + 256;
             if (ready > catchupLimit) { t->fifo.finishedRead(ready - targetPrebuffer); ready = t->fifo.getNumReady(); }
@@ -506,7 +509,8 @@ public:
             t->fractionalReadPos.store(currentReadPos - (double)consumed);
             t->fifo.finishedRead(consumed);
             t->lastGain = targetGain;
-            bufferToFill.buffer->copyFrom(1, bufferToFill.startSample, *bufferToFill.buffer, 0, bufferToFill.startSample, bufferToFill.numSamples);
+            if (numOutChannels > 1)
+                bufferToFill.buffer->copyFrom(1, bufferToFill.startSample, *bufferToFill.buffer, 0, bufferToFill.startSample, bufferToFill.numSamples);
         }
         t->currentLevelDb.store(juce::Decibels::gainToDecibels(bufferToFill.buffer->getRMSLevel(0, bufferToFill.startSample, bufferToFill.numSamples)));
         t->healthStatus.store(ready < targetPrebuffer / 2 ? 1 : 0);

@@ -1,4 +1,4 @@
-name: iOS Build (Final Optimized)
+name: iOS Build (Final Compatible)
 
 on:
   push:
@@ -25,7 +25,7 @@ jobs:
             /usr/local/bin/Projucer
           key: ${{ runner.os }}-juce-v1
 
-      - name: Clone and Build Projucer
+      - name: Build Projucer (if not cached)
         if: steps.cache-juce.outputs.cache-hit != 'true'
         run: |
           git clone https://github.com/juce-framework/JUCE.git --depth 1
@@ -43,53 +43,53 @@ jobs:
         run: |
           import xml.etree.ElementTree as ET
           import os
-
           jucer_path = 'NewProject/NewProject.jucer'
           juce_modules = os.path.abspath("JUCE/modules")
-          # Path icon relatif terhadap file .jucer
+          # icon.png ada di folder NewProject/Source/icon.png
+          # Path relatif dari NewProject.jucer ke icon adalah Source/icon.png
           icon_path = 'Source/icon.png'
           
           tree = ET.parse(jucer_path)
           root = tree.getroot()
-
-          # 1. Pasang Icon ke Project
+          
+          # 1. Pasang Icon
           root.set('iconBig', icon_path)
-
-          # 2. Perbaiki SEMUA path modul secara global
+          
+          # 2. Perbaiki SEMUA path modul
           for mp in root.findall(".//MODULEPATH"):
               mp.set("path", juce_modules)
           for mod in root.findall(".//MODULE"):
               mod.set('useLocalCopy', '0')
               mod.set('useGlobalPath', '0')
-
+          
           # 3. Bersihkan exporter lama dan buat Exporter iOS yang bersih
           export_formats = root.find('EXPORTFORMATS')
           if export_formats is not None:
               for child in list(export_formats):
                   export_formats.remove(child)
-
-          # Tambahkan Izin Jaringan (Mencegah Force Close saat pilih channel)
+          
+          # Tambahkan Izin Jaringan (Mencegah Force Close)
           plist_extras = """
           <plist>
             <dict>
               <key>NSLocalNetworkUsageDescription</key>
-              <string>SkyStream RX membutuhkan akses jaringan lokal untuk menerima data audio dari TX.</string>
+              <string>SkyStream membutuhkan akses jaringan lokal untuk menerima data audio dari TX.</string>
               <key>NSBluetoothAlwaysUsageDescription</key>
-              <string>SkyStream RX membutuhkan akses bluetooth untuk output audio.</string>
+              <string>SkyStream membutuhkan akses bluetooth untuk output audio.</string>
             </dict>
           </plist>
           """
-
+          
           xcode_iphone = ET.SubElement(export_formats, 'XCODE_IPHONE', {
               'targetFolder': 'Builds/iOS',
               'appleCombinedIPHONEOS_IPHONESIMULATOR': '1',
               'iosScreenOrientation': 'UIInterfaceOrientationPortrait',
               'bundleIdentifier': 'com.skystream.rx',
+              'deploymentTarget': '13.0',
               'customPList': plist_extras.strip()
           })
           
           configs = ET.SubElement(xcode_iphone, 'CONFIGURATIONS')
-          # MENGESET NAMA APLIKASI MENJADI "SkyStream"
           ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '1', 'name': 'Debug', 'targetName': 'SkyStream'})
           ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '0', 'name': 'Release', 'targetName': 'SkyStream'})
           
@@ -104,13 +104,13 @@ jobs:
         run: |
           Projucer --resave NewProject/NewProject.jucer --fix-missing-dependencies
 
-      - name: Build iOS App
+      - name: Build iOS App (arm64)
         run: |
-          # Nama project di .jucer adalah SkyStreamRXV2, jadi scheme defaultnya:
           xcodebuild -project NewProject/Builds/iOS/SkyStreamRXV2.xcodeproj \
-                     -scheme "SkyStreamRXV2 - App" \
+                     -scheme "SkyStream - App" \
                      -configuration Release \
                      -sdk iphoneos \
+                     -arch arm64 \
                      CONFIGURATION_BUILD_DIR=$GITHUB_WORKSPACE/NewProject/Builds/iOS/build \
                      CODE_SIGNING_ALLOWED=NO \
                      CODE_SIGNING_REQUIRED=NO \
