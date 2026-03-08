@@ -1,13 +1,10 @@
-name: iOS Build
+name: iOS Build (SkyStream Final)
 
 on:
   push:
-    branches:
-      - main
-      - master
+    branches: [ main, master ]
   pull_request:
-    branches:
-      - main- master
+    branches: [ main, master ]
 
 jobs:
   build-ios:
@@ -28,7 +25,7 @@ jobs:
             /usr/local/bin/Projucer
           key: ${{ runner.os }}-juce-v1
 
-      - name: Build Projucer (if not cached)
+      - name: Clone and Build Projucer
         if: steps.cache-juce.outputs.cache-hit != 'true'
         run: |
           git clone https://github.com/juce-framework/JUCE.git --depth 1
@@ -54,7 +51,6 @@ jobs:
           root = tree.getroot()
           
           root.set('iconBig', icon_path)
-          
           for mp in root.findall(".//MODULEPATH"):
               mp.set("path", juce_modules)
           for mod in root.findall(".//MODULE"):
@@ -82,13 +78,13 @@ jobs:
               'appleCombinedIPHONEOS_IPHONESIMULATOR': '1',
               'iosScreenOrientation': 'UIInterfaceOrientationPortrait',
               'bundleIdentifier': 'com.skystream.rx',
-              'deploymentTarget': '13.0',
+              'deploymentTarget': '12.0', # AGAR BISA UNTUK IPHONE 6
               'customPList': plist_extras.strip()
           })
           
           configs = ET.SubElement(xcode_iphone, 'CONFIGURATIONS')
-          ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '1', 'name': 'Debug', 'targetName': 'SkyStreamRXV2'})
-          ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '0', 'name': 'Release', 'targetName': 'SkyStreamRXV2'})
+          ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '1', 'name': 'Debug', 'targetName': 'SkyStream'})
+          ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '0', 'name': 'Release', 'targetName': 'SkyStream'})
           
           module_paths = ET.SubElement(xcode_iphone, 'MODULEPATHS')
           for mod in root.findall(".//MODULES/MODULE"):
@@ -103,8 +99,9 @@ jobs:
 
       - name: Build iOS App (arm64)
         run: |
+          # Menggunakan skema yang sinkron dengan targetName SkyStream
           xcodebuild -project NewProject/Builds/iOS/SkyStreamRXV2.xcodeproj \
-                     -scheme "SkyStreamRXV2 - App" \
+                     -scheme "SkyStream - App" \
                      -configuration Release \
                      -sdk iphoneos \
                      -arch arm64 \
