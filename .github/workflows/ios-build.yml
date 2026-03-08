@@ -3,8 +3,7 @@ name: iOS Build
 on:
   push:
     branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
+  pull_request:branches: [ main, master ]
 
 jobs:
   build-ios:
@@ -36,22 +35,20 @@ jobs:
 
           jucer_path = 'NewProject/NewProject.jucer'
           juce_modules = os.path.abspath("JUCE/modules")
-          
-          # Gunakan icon yang sudah diletakkan di Source/icon.png
           icon_path = 'Source/icon.png'
           
           tree = ET.parse(jucer_path)
           root = tree.getroot()
 
-          # 1. Pasang Icon ke Project
+          # 1. Pasang Icon dan Matikan Global Path
           root.set('iconBig', icon_path)
+          for mod in root.findall(".//MODULE"):
+              mod.set('useLocalCopy', '0')
+              mod.set('useGlobalPath', '0')
 
           # 2. Perbaiki SEMUA path modul secara global
           for mp in root.findall(".//MODULEPATH"):
               mp.set("path", juce_modules)
-          for mod in root.findall(".//MODULE"):
-              mod.set('useLocalCopy', '0')
-              mod.set('useGlobalPath', '0')
 
           # 3. Bersihkan exporter lama dan buat Exporter iOS yang bersih
           export_formats = root.find('EXPORTFORMATS')
@@ -59,7 +56,7 @@ jobs:
               for child in list(export_formats):
                   export_formats.remove(child)
 
-          # Deskripsi Izin Jaringan (Mencegah Force Close/Crash di iPhone)
+          # Deskripsi Izin Jaringan (Mencegah Force Close)
           plist_extras = """
           <plist>
             <dict>
@@ -80,8 +77,9 @@ jobs:
           })
           
           configs = ET.SubElement(xcode_iphone, 'CONFIGURATIONS')
-          ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '1', 'name': 'Debug', 'targetName': 'SkyStream'})
-          ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '0', 'name': 'Release', 'targetName': 'SkyStream'})
+          # Kita tetapkan targetName tetap SkyStreamRXV2 agar scheme-nya konsisten
+          ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '1', 'name': 'Debug', 'targetName': 'SkyStreamRXV2'})
+          ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '0', 'name': 'Release', 'targetName': 'SkyStreamRXV2'})
           
           module_paths = ET.SubElement(xcode_iphone, 'MODULEPATHS')
           for mod in root.findall(".//MODULES/MODULE"):
@@ -96,8 +94,9 @@ jobs:
 
       - name: Build iOS App
         run: |
+          # Menggunakan Scheme default JUCE: "NamaProject - App"
           xcodebuild -project NewProject/Builds/iOS/SkyStreamRXV2.xcodeproj \
-                     -scheme "SkyStream - App" \
+                     -scheme "SkyStreamRXV2 - App" \
                      -configuration Release \
                      -sdk iphoneos \
                      CONFIGURATION_BUILD_DIR=$GITHUB_WORKSPACE/NewProject/Builds/iOS/build \
