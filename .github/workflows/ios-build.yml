@@ -1,8 +1,7 @@
 name: iOS Build (Final Compatible)
 
 on:
-  push:
-    branches: [ main, master ]
+  push:    branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
 
@@ -88,9 +87,9 @@ jobs:
           })
           
           configs = ET.SubElement(xcode_iphone, 'CONFIGURATIONS')
-          # Kunci: targetName SkyStream akan menghasilkan skema "SkyStream - App"
-          ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '1', 'name': 'Debug', 'targetName': 'SkyStream'})
-          ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '0', 'name': 'Release', 'targetName': 'SkyStream'})
+          # Kita biarkan targetName mengikuti nama project asli agar skema tidak error
+          ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '1', 'name': 'Debug', 'targetName': 'SkyStreamRXV2'})
+          ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '0', 'name': 'Release', 'targetName': 'SkyStreamRXV2'})
           
           module_paths = ET.SubElement(xcode_iphone, 'MODULEPATHS')
           for mod in root.findall(".//MODULES/MODULE"):
@@ -105,9 +104,9 @@ jobs:
 
       - name: Build iOS App (arm64)
         run: |
-          # Perbaikan skema menjadi "SkyStream - App"
+          # Gunakan skema default yang pasti ada
           xcodebuild -project NewProject/Builds/iOS/SkyStreamRXV2.xcodeproj \
-                     -scheme "SkyStream - App" \
+                     -scheme "SkyStreamRXV2 - App" \
                      -configuration Release \
                      -sdk iphoneos \
                      -arch arm64 \
