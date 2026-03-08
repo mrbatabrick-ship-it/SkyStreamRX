@@ -1,7 +1,8 @@
 name: iOS Build
 
 on:
-  push:branches: [ main, master ]
+  push:
+    branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
 
@@ -27,7 +28,7 @@ jobs:
           xcodebuild -configuration Release -quiet
           sudo cp build/Release/Projucer.app/Contents/MacOS/Projucer /usr/local/bin/
 
-      - name: Configure Jucer File (Python)
+      - name: Configure Jucer File (Python Script)
         shell: python
         run: |
           import xml.etree.ElementTree as ET
@@ -35,7 +36,8 @@ jobs:
 
           jucer_path = 'NewProject/NewProject.jucer'
           juce_modules = os.path.abspath("JUCE/modules")
-          # Icon sekarang diambil dari folder Source sesuai langkah copy tadi
+          
+          # Gunakan icon yang sudah diletakkan di Source/icon.png
           icon_path = 'Source/icon.png'
           
           tree = ET.parse(jucer_path)
@@ -57,7 +59,7 @@ jobs:
               for child in list(export_formats):
                   export_formats.remove(child)
 
-          # Deskripsi Izin Jaringan (Mencegah Crash di iPhone)
+          # Deskripsi Izin Jaringan (Mencegah Force Close/Crash di iPhone)
           plist_extras = """
           <plist>
             <dict>
