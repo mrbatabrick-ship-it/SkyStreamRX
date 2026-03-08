@@ -1,4 +1,4 @@
-name: iOS Build (SkyStream Final)
+name: iOS Build
 
 on:
   push:
@@ -10,8 +10,8 @@ jobs:
   build-ios:
     runs-on: macos-latest
 
-    steps:      - name: Checkout code
-        uses: actions/checkout@v4
+    steps:
+      - name: Checkout codeuses: actions/checkout@v4
         with:
           submodules: recursive
 
@@ -45,14 +45,15 @@ jobs:
 
           jucer_path = 'NewProject/NewProject.jucer'
           juce_modules = os.path.abspath("JUCE/modules")
+          # Path icon relatif terhadap file .jucer
           icon_path = 'Source/icon.png'
           
           tree = ET.parse(jucer_path)
           root = tree.getroot()
 
-          # 1. Pasang Icon dan Nama Project
+          # 1. Pasang Icon ke Project agar muncul di iPhone
           root.set('iconBig', icon_path)
-          
+
           # 2. Perbaiki SEMUA path modul secara global
           for mp in root.findall(".//MODULEPATH"):
               mp.set("path", juce_modules)
@@ -66,14 +67,14 @@ jobs:
               for child in list(export_formats):
                   export_formats.remove(child)
 
-          # Tambahkan Izin Jaringan agar TIDAK FORCE CLOSE
+          # Tambahkan NSLocalNetworkUsageDescription agar TIDAK CRASH saat pilih channel
           plist_extras = """
           <plist>
             <dict>
               <key>NSLocalNetworkUsageDescription</key>
-              <string>SkyStream membutuhkan akses jaringan lokal untuk menerima aliran audio.</string>
+              <string>SkyStream RX membutuhkan akses jaringan lokal untuk menerima data audio dari TX.</string>
               <key>NSBluetoothAlwaysUsageDescription</key>
-              <string>SkyStream membutuhkan akses bluetooth untuk audio device.</string>
+              <string>SkyStream RX membutuhkan akses bluetooth untuk output audio.</string>
             </dict>
           </plist>
           """
@@ -87,7 +88,7 @@ jobs:
           })
           
           configs = ET.SubElement(xcode_iphone, 'CONFIGURATIONS')
-          # MENGESET NAMA APLIKASI MENJADI "SkyStream"
+          # Kita set targetName tetap SkyStream agar nama file benar
           ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '1', 'name': 'Debug', 'targetName': 'SkyStream'})
           ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '0', 'name': 'Release', 'targetName': 'SkyStream'})
           
@@ -104,7 +105,7 @@ jobs:
 
       - name: Build iOS App
         run: |
-          # Sekarang nama scheme adalah "SkyStream - App"
+          # Gunakan scheme "SkyStream - App" karena targetName kita ganti ke SkyStream
           xcodebuild -project NewProject/Builds/iOS/SkyStreamRXV2.xcodeproj \
                      -scheme "SkyStream - App" \
                      -configuration Release \
