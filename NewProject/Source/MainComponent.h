@@ -413,8 +413,9 @@ public:
         int targetPrebuffer = t->adaptivePrebuffer.load();
         uint32_t now = juce::Time::getMillisecondCounter();
 
+        // 1. More reactive adaptive prebuffer for iPhone jitter
         if (ready < targetPrebuffer / 2) {
-            if (now - t->lastUnderflowMs.load() > 200) {
+            if (now - t->lastUnderflowMs.load() > 100) { // Faster reaction (from 200ms)
                 int newTarget = juce::jmin(targetPrebuffer + 64, t->maxPrebuffer);
                 t->adaptivePrebuffer.store(newTarget);
                 t->lastUnderflowMs.store(now);
@@ -430,7 +431,13 @@ public:
             if (ready >= targetPrebuffer) t->isInitialized.store(true);
             else { t->lastGain = 0.0f; return; }
         }
-        if (ready < bufferToFill.numSamples + 10) { t->lastGain = 0.0f; t->healthStatus.store(2); return; }
+
+        // 2. Increased safety margin for iPhone/iOS (from 10 to 64 samples)
+        if (ready < bufferToFill.numSamples + 64) {
+            t->lastGain = 0.0f;
+            t->healthStatus.store(2);
+            return;
+        }
 
         float targetGain = juce::Decibels::decibelsToGain((float)mainFader.getValue());
         auto* outL = bufferToFill.buffer->getWritePointer(0, bufferToFill.startSample);
@@ -443,12 +450,13 @@ public:
         double error = (double)ready - (double)targetPrebuffer;
         double correction = 0.0;
 
+        // 3. More stable resampling coefficients
         if (t->lowLatencyMode.load()) {
-            correction = (std::abs(error) < 64.0) ? error * 0.000005 : error * 0.000020;
-            t->playbackRate.store(juce::jlimit(0.9970, 1.0030, 1.0 + correction));
+            correction = (std::abs(error) < 64.0) ? error * 0.000006 : error * 0.000025;
+            t->playbackRate.store(juce::jlimit(0.9960, 1.0040, 1.0 + correction));
         } else {
-            correction = (std::abs(error) < 150.0) ? error * 0.0000025 : error * 0.0000080;
-            t->playbackRate.store(juce::jlimit(0.9985, 1.0015, 1.0 + correction));
+            correction = (std::abs(error) < 150.0) ? error * 0.000003 : error * 0.000010;
+            t->playbackRate.store(juce::jlimit(0.9980, 1.0020, 1.0 + correction));
         }
 
         double currentPlaybackRate = t->playbackRate.load();
@@ -475,7 +483,11 @@ public:
             bufferToFill.buffer->copyFrom(1, bufferToFill.startSample, *bufferToFill.buffer, 0, bufferToFill.startSample, bufferToFill.numSamples);
 
         t->currentLevelDb.store(juce::Decibels::gainToDecibels(bufferToFill.buffer->getRMSLevel(0, bufferToFill.startSample, bufferToFill.numSamples)));
-        t->healthStatus.store(ready < targetPrebuffer / 2 ? 1 : 0);
+
+        // Updated health logic for better indicator accuracy
+        if (ready < targetPrebuffer / 2.5) t->healthStatus.store(2); // Critical Red
+        else if (ready < targetPrebuffer / 1.5) t->healthStatus.store(1); // Warning Yellow
+        else t->healthStatus.store(0); // Healthy Green
     }
 
     void acquireAndroidLocks (bool acquire) {
