@@ -1,4 +1,4 @@
-name: iOS Build
+name: iOS Build (Final Optimized)
 
 on:
   push:
@@ -11,11 +11,12 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      - name: Checkout codeuses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Build Projucer (Cached)
+      - name: Cache JUCE and Projucer
         id: cache-juce
         uses: actions/cache@v4
         with:
@@ -51,7 +52,7 @@ jobs:
           tree = ET.parse(jucer_path)
           root = tree.getroot()
 
-          # 1. Pasang Icon ke Project agar muncul di iPhone
+          # 1. Pasang Icon ke Project
           root.set('iconBig', icon_path)
 
           # 2. Perbaiki SEMUA path modul secara global
@@ -67,7 +68,7 @@ jobs:
               for child in list(export_formats):
                   export_formats.remove(child)
 
-          # Tambahkan NSLocalNetworkUsageDescription agar TIDAK CRASH saat pilih channel
+          # Tambahkan Izin Jaringan (Mencegah Force Close saat pilih channel)
           plist_extras = """
           <plist>
             <dict>
@@ -88,7 +89,7 @@ jobs:
           })
           
           configs = ET.SubElement(xcode_iphone, 'CONFIGURATIONS')
-          # Kita set targetName tetap SkyStream agar nama file benar
+          # MENGESET NAMA APLIKASI MENJADI "SkyStream"
           ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '1', 'name': 'Debug', 'targetName': 'SkyStream'})
           ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '0', 'name': 'Release', 'targetName': 'SkyStream'})
           
@@ -105,9 +106,9 @@ jobs:
 
       - name: Build iOS App
         run: |
-          # Gunakan scheme "SkyStream - App" karena targetName kita ganti ke SkyStream
+          # Nama project di .jucer adalah SkyStreamRXV2, jadi scheme defaultnya:
           xcodebuild -project NewProject/Builds/iOS/SkyStreamRXV2.xcodeproj \
-                     -scheme "SkyStream - App" \
+                     -scheme "SkyStreamRXV2 - App" \
                      -configuration Release \
                      -sdk iphoneos \
                      CONFIGURATION_BUILD_DIR=$GITHUB_WORKSPACE/NewProject/Builds/iOS/build \
