@@ -1,10 +1,9 @@
-name: iOS Build (SkyStream Final)
+name: iOS Build (Compatible Version)
 
 on:
   push:
     branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
+  pull_request:    branches: [ main, master ]
 
 jobs:
   build-ios:
@@ -25,7 +24,7 @@ jobs:
             /usr/local/bin/Projucer
           key: ${{ runner.os }}-juce-v1
 
-      - name: Clone and Build Projucer
+      - name: Build Projucer (if not cached)
         if: steps.cache-juce.outputs.cache-hit != 'true'
         run: |
           git clone https://github.com/juce-framework/JUCE.git --depth 1
@@ -50,18 +49,23 @@ jobs:
           tree = ET.parse(jucer_path)
           root = tree.getroot()
           
+          # 1. Pasang Icon
           root.set('iconBig', icon_path)
+          
+          # 2. Perbaiki SEMUA path modul
           for mp in root.findall(".//MODULEPATH"):
               mp.set("path", juce_modules)
           for mod in root.findall(".//MODULE"):
               mod.set('useLocalCopy', '0')
               mod.set('useGlobalPath', '0')
           
+          # 3. Bersihkan exporter lama dan buat Exporter iOS yang bersih
           export_formats = root.find('EXPORTFORMATS')
           if export_formats is not None:
               for child in list(export_formats):
                   export_formats.remove(child)
           
+          # Tambahkan Izin Jaringan (Mencegah Force Close)
           plist_extras = """
           <plist>
             <dict>
@@ -78,7 +82,7 @@ jobs:
               'appleCombinedIPHONEOS_IPHONESIMULATOR': '1',
               'iosScreenOrientation': 'UIInterfaceOrientationPortrait',
               'bundleIdentifier': 'com.skystream.rx',
-              'deploymentTarget': '12.0', # AGAR BISA UNTUK IPHONE 6
+              'deploymentTarget': '13.0',
               'customPList': plist_extras.strip()
           })
           
@@ -99,7 +103,7 @@ jobs:
 
       - name: Build iOS App (arm64)
         run: |
-          # Menggunakan skema yang sinkron dengan targetName SkyStream
+          # Perbaikan skema menjadi "SkyStream - App" agar sesuai targetName di Python
           xcodebuild -project NewProject/Builds/iOS/SkyStreamRXV2.xcodeproj \
                      -scheme "SkyStream - App" \
                      -configuration Release \
