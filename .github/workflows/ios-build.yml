@@ -1,4 +1,4 @@
-name: iOS Build (Final Fixed)
+name: iOS Build (Final Compatible)
 
 on:
   push:
@@ -43,31 +43,30 @@ jobs:
         run: |
           import xml.etree.ElementTree as ET
           import os
-
           jucer_path = 'NewProject/NewProject.jucer'
           juce_modules = os.path.abspath("JUCE/modules")
           icon_path = 'Source/icon.png'
           
           tree = ET.parse(jucer_path)
           root = tree.getroot()
-
-          # 1. Pasang Icon dan Nama Project
+          
+          # 1. Pasang Icon
           root.set('iconBig', icon_path)
           
-          # 2. Perbaiki SEMUA path modul secara global
+          # 2. Perbaiki SEMUA path modul
           for mp in root.findall(".//MODULEPATH"):
               mp.set("path", juce_modules)
           for mod in root.findall(".//MODULE"):
               mod.set('useLocalCopy', '0')
               mod.set('useGlobalPath', '0')
-
+          
           # 3. Bersihkan exporter lama dan buat Exporter iOS yang bersih
           export_formats = root.find('EXPORTFORMATS')
           if export_formats is not None:
               for child in list(export_formats):
                   export_formats.remove(child)
-
-          # Izin Jaringan (Agar tidak crash)
+          
+          # Tambahkan Izin Jaringan (Mencegah Force Close)
           plist_extras = """
           <plist>
             <dict>
@@ -78,17 +77,18 @@ jobs:
             </dict>
           </plist>
           """
-
+          
           xcode_iphone = ET.SubElement(export_formats, 'XCODE_IPHONE', {
               'targetFolder': 'Builds/iOS',
               'appleCombinedIPHONEOS_IPHONESIMULATOR': '1',
               'iosScreenOrientation': 'UIInterfaceOrientationPortrait',
               'bundleIdentifier': 'com.skystream.rx',
+              'deploymentTarget': '13.0',
               'customPList': plist_extras.strip()
           })
           
           configs = ET.SubElement(xcode_iphone, 'CONFIGURATIONS')
-          # Kunci: Nama target diatur menjadi "SkyStream"
+          # Kunci: targetName SkyStream akan menghasilkan skema "SkyStream - App"
           ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '1', 'name': 'Debug', 'targetName': 'SkyStream'})
           ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '0', 'name': 'Release', 'targetName': 'SkyStream'})
           
@@ -105,9 +105,9 @@ jobs:
 
       - name: Build iOS App (arm64)
         run: |
-          # Sekarang nama scheme adalah "SkyStream" (sesuai targetName di Python)
+          # Perbaikan skema menjadi "SkyStream - App"
           xcodebuild -project NewProject/Builds/iOS/SkyStreamRXV2.xcodeproj \
-                     -scheme "SkyStream" \
+                     -scheme "SkyStream - App" \
                      -configuration Release \
                      -sdk iphoneos \
                      -arch arm64 \
