@@ -1,9 +1,9 @@
-name: iOS Build (Final Compatible)
+name: iOS Build (Fixed)
 
 on:
-  push:    branches: [ main, master ]
-  pull_request:
+  push:
     branches: [ main, master ]
+  pull_request:    branches: [ main, master ]
 
 jobs:
   build-ios:
@@ -24,7 +24,7 @@ jobs:
             /usr/local/bin/Projucer
           key: ${{ runner.os }}-juce-v1
 
-      - name: Build Projucer (if not cached)
+      - name: Clone and Build Projucer
         if: steps.cache-juce.outputs.cache-hit != 'true'
         run: |
           git clone https://github.com/juce-framework/JUCE.git --depth 1
@@ -49,17 +49,17 @@ jobs:
           tree = ET.parse(jucer_path)
           root = tree.getroot()
           
-          # 1. Pasang Icon
+          # Pasang Icon
           root.set('iconBig', icon_path)
           
-          # 2. Perbaiki SEMUA path modul
+          # Perbaiki SEMUA path modul
           for mp in root.findall(".//MODULEPATH"):
               mp.set("path", juce_modules)
           for mod in root.findall(".//MODULE"):
               mod.set('useLocalCopy', '0')
               mod.set('useGlobalPath', '0')
           
-          # 3. Bersihkan exporter lama dan buat Exporter iOS yang bersih
+          # Bersihkan exporter lama dan buat Exporter iOS yang bersih
           export_formats = root.find('EXPORTFORMATS')
           if export_formats is not None:
               for child in list(export_formats):
@@ -87,7 +87,7 @@ jobs:
           })
           
           configs = ET.SubElement(xcode_iphone, 'CONFIGURATIONS')
-          # Kita biarkan targetName mengikuti nama project asli agar skema tidak error
+          # Target tetap RXV2 agar skema Xcode sinkron
           ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '1', 'name': 'Debug', 'targetName': 'SkyStreamRXV2'})
           ET.SubElement(configs, 'CONFIGURATION', {'isDebug': '0', 'name': 'Release', 'targetName': 'SkyStreamRXV2'})
           
@@ -104,7 +104,7 @@ jobs:
 
       - name: Build iOS App (arm64)
         run: |
-          # Gunakan skema default yang pasti ada
+          # PERBAIKAN: Menggunakan skema default yang pasti ada
           xcodebuild -project NewProject/Builds/iOS/SkyStreamRXV2.xcodeproj \
                      -scheme "SkyStreamRXV2 - App" \
                      -configuration Release \
