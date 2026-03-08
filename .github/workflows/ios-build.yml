@@ -10,8 +10,7 @@ jobs:
   build-ios:
     runs-on: macos-latest
 
-    steps:
-      - name: Checkout code
+    steps:- name: Checkout code
         uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -36,34 +35,35 @@ jobs:
 
           jucer_path = 'NewProject/NewProject.jucer'
           juce_modules = os.path.abspath("JUCE/modules")
-          
-          # Gunakan path icon yang sudah kita siapkan di langkah 1
-          icon_path = 'NewProject/Source/icon.png'
+          icon_path = 'Source/icon.png'
           
           tree = ET.parse(jucer_path)
           root = tree.getroot()
 
-          # 1. Perbaiki Path Modul
-          for mp in root.findall(".//MODULEPATH"):
-              mp.set("path", juce_modules)
-
-          # 2. Pasang Icon agar muncul di iOS
+          # 1. Pasang Icon ke Project
           root.set('iconBig', icon_path)
 
-          # 3. Bersihkan exporter lama dan buat Exporter iOS baru
+          # 2. Perbaiki SEMUA path modul secara global
+          for mp in root.findall(".//MODULEPATH"):
+              mp.set("path", juce_modules)
+          for mod in root.findall(".//MODULE"):
+              mod.set('useLocalCopy', '0')
+              mod.set('useGlobalPath', '0')
+
+          # 3. Bersihkan exporter lama dan buat Exporter iOS yang bersih
           export_formats = root.find('EXPORTFORMATS')
           if export_formats is not None:
               for child in list(export_formats):
                   export_formats.remove(child)
 
-          # Deskripsi Izin Jaringan (Mencegah Force Close saat pilih channel)
+          # Deskripsi Izin Jaringan (Mencegah Crash)
           plist_extras = """
           <plist>
             <dict>
               <key>NSLocalNetworkUsageDescription</key>
-              <string>SkyStream RX membutuhkan akses jaringan lokal untuk menerima data audio dari TX.</string>
+              <string>SkyStream RX membutuhkan akses jaringan lokal untuk menerima data audio.</string>
               <key>NSBluetoothAlwaysUsageDescription</key>
-              <string>SkyStream RX membutuhkan akses bluetooth untuk output audio.</string>
+              <string>SkyStream RX membutuhkan akses bluetooth untuk audio.</string>
             </dict>
           </plist>
           """
@@ -94,7 +94,7 @@ jobs:
       - name: Build iOS App
         run: |
           xcodebuild -project NewProject/Builds/iOS/SkyStreamRXV2.xcodeproj \
-                     -scheme "SkyStreamRXV2 - App" \
+                     -scheme "SkyStream - App" \
                      -configuration Release \
                      -sdk iphoneos \
                      CONFIGURATION_BUILD_DIR=$GITHUB_WORKSPACE/NewProject/Builds/iOS/build \
