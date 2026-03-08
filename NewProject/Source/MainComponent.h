@@ -10,7 +10,6 @@
 #include <thread>
 #include <chrono>
 
-// Pindahkan include ini ke luar agar bisa dibaca iOS dan Android
 #if JUCE_ANDROID || JUCE_IOS
 #include <sys/socket.h>
 #endif
